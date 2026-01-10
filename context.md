@@ -115,6 +115,8 @@ This repo will contain:
 - **2026-01-10** – Decided to build a **Streamlit** app as the primary UI for the Analytics Copilot demo.
 - **2026-01-10** – Introduced a **dataset smoke test script** (`scripts/smoke_load_dataset.py`) to verify access to WikiSQL via Hugging Face Datasets early in the project.
 - **2026-01-10** – Switched the primary training dataset from `Salesforce/wikisql` (script-based, incompatible with `datasets>=4`) to **`b-mc2/sql-create-context`**, which is backed by parquet data files and provides natural-language questions, `CREATE TABLE` context, and SQL answers ideal for text-to-SQL.
+- **2026-01-10** – Chose to rely on the `CREATE TABLE` context in `b-mc2/sql-create-context` as a primary mechanism to reduce schema hallucinations during text-to-SQL generation, by always conditioning the model on the explicit schema.
+- **2026-01-10** – Decided to create our own deterministic validation split (default 8% of the data, seed=42) from the single `train` split shipped with `b-mc2/sql-create-context`, to enable reproducible model selection and early-stopping.
 
 ---
 
@@ -127,3 +129,4 @@ This repo will contain:
   - Implemented `scripts/smoke_load_dataset.py` for WikiSQL dataset access smoke testing.
   - Added basic pytest smoke test to verify that the `text2sql` package imports successfully.
 - **2026-01-10** – Updated dataset plan and smoke loader to use the parquet-backed **`b-mc2/sql-create-context`** dataset (compatible with `datasets>=4`) instead of the script-based `Salesforce/wikisql`, and documented this decision in the project context.
+- **2026-01-10** – Added a dataset preprocessing pipeline (`scripts/build_dataset.py`) that converts `b-mc2/sql-create-context` into Alpaca-style instruction-tuning JSONL files under `data/processed/` (train/val splits), along with reusable formatting utilities in `text2sql.data_prep`.

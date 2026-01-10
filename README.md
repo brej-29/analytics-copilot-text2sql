@@ -92,13 +92,37 @@ Expected behavior:
 
 ---
 
+## Dataset Preparation
+
+The raw `b-mc2/sql-create-context` dataset is converted into Alpaca-style
+instruction-tuning JSONL files using the build script:
+
+```bash
+# Full preprocessing run (uses the full dataset)
+python scripts/build_dataset.py
+
+# Quick dev run on a subset of rows (e.g., 2000 examples)
+python scripts/build_dataset.py --max_rows 2000
+```
+
+By default, the script writes:
+
+- `data/processed/train.jsonl`
+- `data/processed/val.jsonl`
+
+The `data/` directory is **not** tracked in version control; it is intended to
+be generated locally as needed. See [`docs/dataset.md`](./docs/dataset.md) for
+details on the raw dataset, the train/val split strategy, and the output format.
+
+---
+
 ## Training (placeholder)
 
 > Detailed training instructions will be added once the training pipeline is implemented.
 
 Planned content for this section:
 
-- How to run QLoRA fine-tuning on Mistral-7B using WikiSQL.
+- How to run QLoRA fine-tuning on Mistral-7B using the processed JSONL files.
 - Recommended hyperparameters and hardware setup.
 - Checkpointing, resuming, and logging (e.g., Weights & Biases or HF Hub).
 - Exporting and pushing the trained model/adapters to Hugging Face Hub.
