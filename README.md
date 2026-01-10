@@ -6,7 +6,7 @@ This repository contains the scaffolding for an **Analytics Copilot** that conve
 
 The project is currently in the **initial setup** phase:
 - Basic Python project structure (src/ layout).
-- Dataset smoke test for **WikiSQL** using Hugging Face Datasets.
+- Dataset smoke test for **b-mc2/sql-create-context** using Hugging Face Datasets.
 - Minimal test suite using `pytest`.
 - Persistent project context in `context.md`.
 
@@ -27,8 +27,8 @@ Planned high-level components:
   - Libraries: `transformers`, `peft`, `accelerate`, etc.
 
 - **Data & Training**
-  - Dataset: WikiSQL (Hugging Face: `Salesforce/wikisql`)
-  - Preprocessing: prompt construction, schema serialization.
+  - Primary dataset: **b-mc2/sql-create-context** (Hugging Face: `b-mc2/sql-create-context`)
+  - Preprocessing: prompt construction, schema serialization, and handling of `CREATE TABLE` context.
   - Training scripts & notebooks in `scripts/` and `notebooks/`.
 
 - **Inference & Serving**
@@ -42,15 +42,17 @@ Planned high-level components:
 
 ---
 
-## Dataset (WikiSQL) + Smoke Loader
+## Dataset (b-mc2/sql-create-context) + Smoke Loader
 
-### Primary Training Dataset: WikiSQL
+### Primary Training Dataset: b-mc2/sql-create-context
 
-- **Name:** `Salesforce/wikisql`
-- **Source:** [Hugging Face Datasets](https://huggingface.co/datasets/Salesforce/wikisql)
-- **Contents:** Natural language questions, associated SQL queries, and table schemas.
+- **Name:** `b-mc2/sql-create-context`
+- **Source:** [Hugging Face Datasets](https://huggingface.co/datasets/b-mc2/sql-create-context)
+- **Contents:** Natural language questions, the corresponding `CREATE TABLE` DDL context, and gold SQL query answers (well-suited for text-to-SQL with schema awareness).
 
 This repo includes a **smoke script** to verify dataset access locally.
+
+> Note: The **WikiSQL** Hugging Face dataset (`Salesforce/wikisql`) is implemented as a **script-based dataset** (`wikisql.py`). Starting with `datasets>=4`, script-based datasets like this are no longer supported by default, so loading WikiSQL will fail unless you explicitly **pin `datasets<4.0.0`** or use an older version of `datasets`. This project instead uses `b-mc2/sql-create-context`, which is backed by parquet data files and compatible with `datasets 4.x`.
 
 ### Prerequisites
 
@@ -75,7 +77,7 @@ python -m pip install -r requirements.txt
 
 ### Running the Smoke Loader
 
-To verify that the WikiSQL dataset can be loaded:
+To verify that the `b-mc2/sql-create-context` dataset can be loaded:
 
 ```bash
 python scripts/smoke_load_dataset.py
@@ -84,9 +86,9 @@ python scripts/smoke_load_dataset.py
 Expected behavior:
 
 - Logs basic information while loading the dataset.
-- Prints the sizes of the `train`, `validation`, and `test` splits.
-- Shows one example from the training split.
-- If an error occurs (e.g., missing `datasets` library or no network), a clear error message will be logged.
+- Prints the sizes of all available splits (e.g., `train`, `validation`, `test` if present).
+- Shows one example from the `train` split.
+- If an error occurs (e.g., missing `datasets` library, no network, or invalid dataset name), a clear error message will be logged.
 
 ---
 

@@ -15,3 +15,4 @@ numpy>=1.26.0
 
 # --- Tooling / testing ---
 pytest>=8.0.0
+huggingface-hub>=0.36.0

@@ -22,7 +22,7 @@ This repo will contain:
 ## 2) Final Deliverables (HF model, Streamlit app, repo, metrics)
 
 **Model & Artifacts**
-- A trained text-to-SQL model based on **Mistral-7B** fine-tuned via **QLoRA** on WikiSQL.
+- A trained text-to-SQL model based on **Mistral-7B** fine-tuned via **QLoRA** on the **b-mc2/sql-create-context** dataset (with optional evaluation on WikiSQL and Spider).
 - Model uploaded to **Hugging Face Hub** (public or private), including:
   - Model weights and adapter (QLoRA) weights.
   - Model card documenting training data, evaluation metrics, and usage instructions.
@@ -79,15 +79,15 @@ This repo will contain:
 ## 4) Dataset Plan
 
 **Training Dataset**
-- **WikiSQL**:
-  - Source: Hugging Face Datasets → `"Salesforce/wikisql"`.
-  - Description: Natural-language questions paired with SQL queries over Wikipedia tables.
+- **b-mc2/sql-create-context**:
+  - Source: Hugging Face Datasets → `"b-mc2/sql-create-context"`.
+  - Description: Natural-language questions paired with the corresponding `CREATE TABLE` DDL context and gold SQL query answers, making it well-suited for text-to-SQL.
   - Usage in this project:
     - Primary training dataset for the text-to-SQL model.
     - May apply light preprocessing:
       - Normalize or canonicalize SQL.
-      - Add schema context features (e.g., column names) to the input prompt.
-      - Filter out pathological or broken examples if necessary.
+      - Standardize how `CREATE TABLE` context and schema information are injected into prompts.
+      - Filter out pathological or broken examplesary.
 
 **Evaluation Dataset (optional later)**
 - **Spider dev**:
@@ -114,6 +114,7 @@ This repo will contain:
 - **2026-01-10** – Selected a **`src/`-based layout** (`src/text2sql`) and Python tooling centered on `requirements.txt` (instead of pyproject.toml) for simpler initial setup.
 - **2026-01-10** – Decided to build a **Streamlit** app as the primary UI for the Analytics Copilot demo.
 - **2026-01-10** – Introduced a **dataset smoke test script** (`scripts/smoke_load_dataset.py`) to verify access to WikiSQL via Hugging Face Datasets early in the project.
+- **2026-01-10** – Switched the primary training dataset from `Salesforce/wikisql` (script-based, incompatible with `datasets>=4`) to **`b-mc2/sql-create-context`**, which is backed by parquet data files and provides natural-language questions, `CREATE TABLE` context, and SQL answers ideal for text-to-SQL.
 
 ---
 
@@ -125,3 +126,4 @@ This repo will contain:
   - Added `requirements.txt`, `.gitignore`, `.env.example`, and `README.md` skeleton.
   - Implemented `scripts/smoke_load_dataset.py` for WikiSQL dataset access smoke testing.
   - Added basic pytest smoke test to verify that the `text2sql` package imports successfully.
+- **2026-01-10** – Updated dataset plan and smoke loader to use the parquet-backed **`b-mc2/sql-create-context`** dataset (compatible with `datasets>=4`) instead of the script-based `Salesforce/wikisql`, and documented this decision in the project context.
