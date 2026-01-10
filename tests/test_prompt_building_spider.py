@@ -18,6 +18,8 @@ _ensure_src_on_path()
 from text2sql.eval.spider import (  # noqa: E402  # isort: skip
     build_schema_map,
     build_spider_prompt,
+    load_spider_schema_map,
+    spider_schema_to_pseudo_ddl,
 )
 
 
@@ -41,18 +43,21 @@ def spider_fixtures() -> tuple[list[dict], dict[str, str]]:
 
     examples = _load_jsonl(spider_examples_path)
     schema_records = _load_jsonl(spider_schema_path)
-    schema_map = build_schema_map(schema_records)
+    schema_map = load_spider_schema_map(schema_records)
 
     return examples, schema_map
 
 
-def test_build_spider_prompt_uses_schema_and_question(spider_fixtures: tuple[list[dict], dict[str, str]]) -> None:
+def test_build_spider_prompt_uses_schema_and_question(
+    spider_fixtures: tuple[list[dict], dict[str, str]]
+) -> None:
     examples, schema_map = spider_fixtures
     example = examples[0]
 
     db_id = example["db_id"]
     question = example["question"]
-    schema_context = schema_map[db_id]
+    raw_schema_text = schema_map[db_id]
+    schema_context = spider_schema_to_pseudo_ddl(raw_schema_text)
 
     prompt = build_spider_prompt(schema_context=schema_context, question=question)
 
@@ -66,3 +71,35 @@ def test_build_spider_prompt_uses_schema_and_question(spider_fixtures: tuple[lis
     assert "CREATE TABLE" in prompt
     assert "### Question:" in prompt
     assert question in prompt
+
+
+def test_load_spider_schema_map_handles_real_column_name(
+    spider_fixtures: tuple[list[dict], dict[str, str]]
+) -> None:
+    _, schema_map = spider_fixtures
+    # Ensure we have mappings for known db_ids from the fixtures.
+    for db_id in ("concert_singer", "academic", "college_1"):
+        assert db_id in schema_map
+        assert isinstance(schema_map[db_id], str)
+        assert schema_map[db_id]
+
+
+def test_intersection_nonzero_with_fixtures(
+    spider_fixtures: tuple[list[dict], dict[str, str]]
+) -> None:
+    examples, schema_map = spider_fixtures
+    spider_db_ids = {ex["db_id"] for ex in examples}
+    schema_db_ids = set(schema_map.keys())
+    intersection = spider_db_ids & schema_db_ids
+    assert intersection, "Expected non-empty intersection between Spider and schema db_ids"
+
+
+def test_spider_schema_to_pseudo_ddl_nonempty(
+    spider_fixtures: tuple[list[dict], dict[str, str]]
+) -> None:
+    _, schema_map = spider_fixtures
+    # Take one schema text and ensure we can build a non-empty pseudo-DDL string.
+    raw_schema_text = next(iter(schema_map.values()))
+    pseudo_ddl = spider_schema_to_pseudo_ddl(raw_schema_text)
+    assert pseudo_ddl
+    assert "CREATE TABLE" in pseudo_ddl

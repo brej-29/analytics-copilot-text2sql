@@ -19,6 +19,8 @@ from text2sql.eval.schema import parse_create_table_context  # noqa: E402  # iso
 from text2sql.eval.spider import (  # noqa: E402  # isort: skip
     build_schema_map,
     build_spider_prompt,
+    load_spider_schema_map,
+    spider_schema_to_pseudo_ddl,
 )
 from text2sql.training.formatting import ensure_sql_only  # noqa: E402  # isort: skip
 
@@ -157,6 +159,66 @@ def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def _build_examples_with_schema(
+    spider_rows: List[Dict[str, Any]],
+    schema_map: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """
+    Join Spider examples with their schemas and log intersection diagnostics.
+    """
+    spider_db_ids = {str(row["db_id"]) for row in spider_rows if "db_id" in row}
+    schema_db_ids = set(schema_map.keys())
+    intersection = spider_db_ids & schema_db_ids
+
+    logger.info("Total Spider examples: %d", len(spider_rows))
+    logger.info("Unique Spider db_ids: %d", len(spider_db_ids))
+    logger.info("Total schema db_ids: %d", len(schema_db_ids))
+    logger.info("Intersection size (db_ids in both): %d", len(intersection))
+
+    if not intersection:
+        spider_samples = sorted(spider_db_ids)[:10]
+        schema_samples = sorted(schema_db_ids)[:10]
+        logger.error("No matching db_ids between Spider split and schema source.")
+        logger.error("Sample Spider db_ids: %s", spider_samples)
+        logger.error("Sample schema db_ids: %s", schema_samples)
+        raise RuntimeError(
+            "No matching db_ids between Spider split and schema source"
+        )
+
+    examples: List[Dict[str, Any]] = []
+    skipped_due_to_missing_schema = 0
+
+    for row in spider_rows:
+        db_id = row.get("db_id")
+        question = row.get("question")
+        query = row.get("query")
+        if db_id is None or question is None or query is None:
+            continue
+
+        db_id_str = str(db_id)
+        schema_text = schema_map.get(db_id_str)
+        if not schema_text:
+            skipped_due_to_missing_schema += 1
+            continue
+
+        examples.append(
+            {
+                "db_id": db_id_str,
+                "question": str(question),
+                "query": str(query),
+                "schema_text": str(schema_text),
+            }
+        )
+
+    logger.info(
+        "After joining with schema: evaluated_count=%d, "
+        "skipped_due_to_missing_schema=%d",
+        len(examples),
+        skipped_due_to_missing_schema,
+    )
+    return examples
+
+
 def _load_spider_from_fixtures() -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Load Spider examples and schema mapping from local test fixtures.
@@ -168,10 +230,11 @@ def _load_spider_from_fixtures() -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     spider_path = fixtures_dir / "spider_sample.jsonl"
     schema_path = fixtures_dir / "spider_schema_sample.jsonl"
 
-    examples = _load_jsonl(spider_path)
+    spider_rows = _load_jsonl(spider_path)
     schema_records = _load_jsonl(schema_path)
-    schema_map = build_schema_map(schema_records)
+    schema_map = load_spider_schema_map(schema_records)
 
+    examples = _build_examples_with_schema(spider_rows, schema_map)
     return examples, schema_map
 
 
@@ -301,8 +364,9 @@ def _load_spider_from_hub(
     Returns
     -------
     (examples, schema_map)
-        examples: list of records with at least db_id, question, query.
-        schema_map: mapping {db_id -> create_table_context}.
+        examples: list of records with at least db_id, question, query and
+        attached schema text.
+        schema_map: mapping {db_id -> raw schema text}.
     """
     from datasets import load_dataset  # Imported lazily to keep tests lightweight.
 
@@ -316,27 +380,12 @@ def _load_spider_from_hub(
     spider_ds = load_dataset(spider_source, split=spider_split)
     schema_ds = load_dataset(schema_source, split="train")
 
-    schema_records = list(schema_ds)
-    schema_map = build_schema_map(schema_records)
+    schema_map = load_spider_schema_map(schema_ds)
 
-    examples: List[Dict[str, Any]] = []
-    for row in spider_ds:
-        db_id = row.get("db_id")
-        question = row.get("question")
-        query = row.get("query")
-        if db_id is None or question is None or query is None:
-            continue
-        db_id_str = str(db_id)
-        if db_id_str not in schema_map:
-            # If we cannot find a schema for this db_id, skip the example.
-            continue
-        examples.append(
-            {
-                "db_id": db_id_str,
-                "question": str(question),
-                "query": str(query),
-            }
-        )
+    # Materialise Spider rows so we can compute intersections and slice.
+    spider_rows: List[Dict[str, Any]] = [dict(row) for row in spider_ds]  # type: ignore[arg-type]
+
+    examples = _build_examples_with_schema(spider_rows, schema_map)
 
     if max_examples is not None and max_examples > 0:
         examples = examples[:max_examples]
@@ -397,10 +446,8 @@ def run_eval(args: argparse.Namespace) -> int:
         db_id = ex["db_id"]
         question = ex["question"]
         gold_query = ex["query"]
-        schema_context = schema_map.get(db_id)
-        if schema_context is None:
-            # This should not happen when using the helper map builders.
-            continue
+        raw_schema_text = ex.get("schema_text", "")
+        schema_context = spider_schema_to_pseudo_ddl(raw_schema_text)
 
         db_ids.append(db_id)
         questions.append(question)
