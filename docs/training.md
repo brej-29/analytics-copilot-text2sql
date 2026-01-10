@@ -303,12 +303,22 @@ If you encounter CUDA OOM errors:
 
 ---
 
-## 6. External Validation (Spider dev) – Planned
+## 6. External Validation (Spider dev)
 
-After primary training on `b-mc2/sql-create-context`, we plan to perform
-**secondary external validation** on the **Spider dev** split (e.g.,
-`xlangai/spider`), which is significantly more challenging (multi-table,
-cross-domain text-to-SQL).
+After primary training on `b-mc2/sql-create-context`, we run a **secondary
+external validation** on the **Spider dev** split (via `xlangai/spider` with
+schemas from `richardr1126/spider-schema`). This provides a harder, more
+cross-domain benchmark (multi-table joins, many databases, compositional
+generalization).
 
-This will be implemented as a dedicated evaluation pipeline (Task 4). For the
-high-level plan, see [`docs/external_validation.md`](./external_validation.md).
+The external validation pipeline is implemented in:
+
+- `scripts/evaluate_spider_external.py`
+
+and documented in:
+
+- [`docs/external_validation.md`](./external_validation.md)
+- [`docs/evaluation.md`](./evaluation.md)
+
+Spider is licensed under **CC BY-SA 4.0** and is used **only for evaluation**
+in this project, not for training.

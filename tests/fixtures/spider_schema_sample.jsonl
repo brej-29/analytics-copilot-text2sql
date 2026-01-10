@@ -1,0 +1,3 @@
+{"db_id":"department_management","schema":"head : head_id (number) , name (text) , born_state (text) , age (number) | department : department_id (number) , name (text) , budget_in_billions (number) , creation (number)"}
+{"db_id":"farm","schema":"farm : Farm_ID (number) , Total_Horses (number) , Working_Horses (number) , Cows (number) | city : City_ID (number) , Official_Name (text) , Population (number) , Status (text) | farm_competition : Competition_ID (number) , Host_city_ID (number) , Theme (text) , Year (number)"}
+{"db_id":"student_assessment","schema":"courses : course_id (number) , course_name (text) | student_course_registrations : registration_id (number) , student_id (number) , course_id (number) | students : student_id (number) , student_details (text)"}

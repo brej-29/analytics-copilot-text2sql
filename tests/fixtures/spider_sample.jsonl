@@ -1,0 +1,5 @@
+{"db_id":"department_management","question":"How many heads of the departments are older than 56 ?","query":"SELECT count(*) FROM head WHERE age > 56"}
+{"db_id":"department_management","question":"List the name, born state and age of the heads of departments ordered by age.","query":"SELECT name, born_state, age FROM head ORDER BY age"}
+{"db_id":"farm","question":"How many farms are there?","query":"SELECT count(*) FROM farm"}
+{"db_id":"farm","question":"List the official names of cities that have not held any competition.","query":"SELECT Official_Name FROM city WHERE City_ID NOT IN (SELECT Host_city_ID FROM farm_competition)"}
+{"db_id":"student_assessment","question":"What is the name of the course with the most registered students?","query":"SELECT T1.course_name FROM courses AS T1 JOIN student_course_registrations AS T2 ON T1.course_id = T2.course_id GROUP BY T1.course_id ORDER BY count(*) DESC LIMIT 1"}

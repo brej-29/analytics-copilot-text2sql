@@ -151,32 +151,108 @@ QLoRA/LoRA configuration, and troubleshooting (OOM, sequence length, etc.).
 
 ---
 
-## Evaluation (placeholder)
+## Evaluation
 
-> Evaluation scripts and methodology will be documented here later.
+This repository includes a lightweight but consistent evaluation pipeline:
 
-Planned content for this section:
+- **Internal evaluation** on the processed validation split of
+  `b-mc2/sql-create-context`.
+- **External evaluation** on the **Spider dev** split using
+  `xlangai/spider` + `richardr1126/spider-schema`.
 
-- How to run evaluation on:
-  - WikiSQL test split.
-  - (Optional) Spider dev set.
-- Metrics:
-  - Logical form accuracy (exact SQL match).
-  - Execution accuracy (matching query results).
-  - Latency benchmarks (p50/p95).
-- How to generate evaluation reports under `docs/` or `outputs/`.
+Both use the **same instruction and prompt template** as training and expose:
+
+- Exact Match (EM) on normalized SQL.
+- No-values EM (ignoring literal differences).
+- SQL parse success rate (via `sqlglot`).
+- Schema adherence rate (internal only, using the `CREATE TABLE` context).
+
+See [`docs/evaluation.md`](./docs/evaluation.md) for details.
+
+### Internal evaluation (b-mc2/sql-create-context val)
+
+Once you have built the processed dataset with `scripts/build_dataset.py`
+(which writes `data/processed/train.jsonl` and `data/processed/val.jsonl`), you
+can run:
+
+```bash
+# Offline-friendly pipeline test (no model, small fixture)
+python scripts/evaluate_internal.py --mock
+
+# Full run with a fine-tuned adapter (GPU recommended)
+python scripts/evaluate_internal.py \
+  --val_path data/processed/val.jsonl \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir outputs/adapters \
+  --device auto \
+  --max_examples 200
+```
+
+This writes:
+
+- `reports/eval_internal.json` – metrics + config (machine-readable).
+- `reports/eval_internal.md` – human-readable Markdown report with examples.
+
+### External evaluation (Spider dev)
+
+After internal training, you can measure cross-domain generalization on Spider
+dev:
+
+```bash
+# Offline-friendly pipeline test (no model, local fixtures only)
+python scripts/evaluate_spider_external.py --mock
+
+# Full run (requires internet + GPU)
+python scripts/evaluate_spider_external.py \
+  --spider_source xlangai/spider \
+  --spider_subset spider \
+  --spider_split validation \
+  --schema_source richardr1126/spider-schema \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir outputs/adapters \
+  --device auto \
+  --max_examples 200
+```
+
+Artifacts:
+
+- `reports/eval_spider.json`
+- `reports/eval_spider.md`
+
+Spider is licensed under **CC BY-SA 4.0** and is used here **only for
+evaluation**, not for training.
+
+For more background and caveats (e.g., how this compares to the official
+Spider leaderboard), see:
+
+- [`docs/evaluation.md`](./docs/evaluation.md)
+- [`docs/external_validation.md`](./docs/external_validation.md)
 
 ---
 
-## External Validation (Spider dev) – planned
+## External Validation (Spider dev)
 
-After training on `b-mc2/sql-create-context`, we plan to add a secondary
-evaluation harness on the **Spider** dev set (e.g., `xlangai/spider`) to
-measure generalization to harder, multi-table, cross-domain text-to-SQL tasks.
+We now implement the planned secondary external validation step on the
+**Spider** dev split:
 
-For the high-level plan, see [`docs/external_validation.md`](./docs/external_validation.md).
-_code
--new-</-
+- Dataset: `xlangai/spider` (text-to-SQL pairs).
+- Schema: `richardr1126/spider-schema` (database schemas per `db_id`).
+- License: CC BY-SA 4.0 (Spider is used **only for evaluation**, not for
+  training).
+
+The external harness builds prompts by:
+
+1. Converting the spider-schema text into pseudo `CREATE TABLE` statements.
+2. Combining the schema with the natural-language question using the same
+   `build_input_text` helper as internal training.
+3. Wrapping everything in the same instruction template as used during
+   fine-tuning.
+
+For details, configuration options, and limitations, see:
+
+- [`docs/external_validation.md`](./docs/external_validation.md)
+- [`docs/evaluation.md`](./docs/evaluation.md)
+
 ---
 
 ## Demo (placeholder)
@@ -203,15 +279,23 @@ Current high-level layout:
 ├── app/                    # Streamlit app (to be implemented)
 ├── docs/                   # Documentation, design notes, evaluation reports
 ├── notebooks/              # Jupyter/Colab notebooks for experimentation
-├── scripts/                # CLI scripts (e.g., dataset loading, training, eval)
-│   └── smoke_load_dataset.py
+├── scripts/                    # CLI scripts (dataset, training, evaluation)
+│   ├── smoke_load_dataset.py   # Dataset smoke test
+│   ├── build_dataset.py        # Build processed train/val JSONL
+│   ├── train_qlora.py          # QLoRA training harness
+│   ├── evaluate_internal.py    # Internal eval on b-mc2/sql-create-context val
+│   └── evaluate_spider_external.py  # External eval on Spider dev
 ├── src/
-│   └── text2sql/           # Core Python package
+│   └── text2sql/               # Core Python package
 │       ├── __init__.py
-│       └── utils/          # Utility modules (to be implemented)
+│       ├── data_prep.py        # Dataset formatting helpers
+│       ├── training/           # Training-time utilities (prompt formatting, etc.)
+│       ├── eval/               # Evaluation utilities (normalization, metrics)
+│       └── utils/              # Misc utilities (to be implemented)
 │           └── __init__.py
 ├── tests/
-│   └── test_repo_smoke.py  # Basic smoke test (imports the package)
+│   ├── fixtures/               # Small offline fixtures for tests and mock eval
+│   └── test_repo_smoke.py      # Basic smoke test (imports the package)
 ├── .env.example            # Example environment file
 ├── .gitignore
 ├── context.md              # Persistent project context & decisions
