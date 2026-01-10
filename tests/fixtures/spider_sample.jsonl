@@ -1,0 +1,5 @@
+{"db_id": "concert_singer", "question": "Show each city and the number of concerts held there.", "query": "SELECT city, COUNT(*) FROM concert GROUP BY city"}
+{"db_id": "concert_singer", "question": "List the names of singers who have concerts in New York.", "query": "SELECT DISTINCT s.name FROM singer AS s JOIN concert AS c ON s.singer_id = c.singer_id WHERE c.city = 'New York'"}
+{"db_id": "academic", "question": "How many professors are older than 50?", "query": "SELECT COUNT(*) FROM professor WHERE age > 50"}
+{"db_id": "academic", "question": "List university names and the number of professors at each.", "query": "SELECT u.name, COUNT(*) FROM university AS u JOIN professor AS p ON u.university_id = p.university_id GROUP BY u.name"}
+{"db_id": "college_1", "question": "Show all distinct cities where colleges are located.", "query": "SELECT DISTINCT city FROM college"}

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import sys
 
-from datasets import Dataset, DatasetDict, load_dataset
+from typing import TYPE_CHECKING
 
 # Ensure the src/ directory is on sys.path so that `text2sql` can be imported
 # when this script is run directly via `python scripts/build_dataset.py`.
@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checking
+    from datasets import Dataset, DatasetDict  # noqa: F401
 
 from text2sql.data_prep import format_record
 
@@ -90,9 +93,9 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 def load_raw_dataset(
     input_jsonl: Optional[Path], max_rows: Optional[int]
-) -> Dataset:
+):
     """
-    Load the raw dataset, either from a local JSONL file or from Hugging Face.
+    Load the raw dataset, either from a local JSONL file or from Hugging F_codeging Face.
 
     Parameters
     ----------
@@ -106,7 +109,8 @@ def load_raw_dataset(
     Returns
     -------
     datasets.Dataset
-        A datasets.Dataset object with at least the keys: question, context, answer.
+        A datasets.Dataset-like object with at least the keys: question, context,
+        answer.
 
     Raises
     ------
@@ -127,8 +131,15 @@ def load_raw_dataset(
                 raise RuntimeError(
                     f"No records found in local JSONL file: {input_jsonl}"
                 )
+
+            # Import datasets lazily so that running with --input_jsonl does not
+            # require the 'datasets' package to be installed at module import time.
+            from datasets import Dataset  # type: ignore[import]
+
             ds = Dataset.from_list(records)
         else:
+            from datasets import DatasetDict, load_dataset  # type: ignore[import]
+
             logger.info("Loading dataset '%s' from Hugging Face Datasets...", DATASET_NAME)
             ds_dict: DatasetDict = load_dataset(DATASET_NAME)
             if "train" not in ds_dict:
@@ -163,8 +174,8 @@ def load_raw_dataset(
 
 
 def split_dataset(
-    ds: Dataset, val_ratio: float, seed: int
-) -> Dict[str, Dataset]:
+    ds, val_ratio: float, seed: int
+) -> Dict[str, Any]:
     """
     Split the dataset into train and validation sets deterministically.
 
@@ -180,7 +191,9 @@ def split_dataset(
     Returns
     -------
     dict
-        A dictionary with keys 'train' and 'val', each a datasets.Dataset.
+        A dictionary with keys 'train' and 'val', each a datasets.Dataset-like
+        obj_codeecnewt</.
+.
     """
     if not (0.0 < val_ratio < 1.0):
         raise ValueError(f"val_ratio must be between 0 and 1, got {val_ratio}.")
@@ -235,7 +248,7 @@ def ensure_output_paths(
 
 
 def write_jsonl(
-    ds: Dataset,
+    ds,
     split_name: str,
     path: Path,
     val_ratio: float,
