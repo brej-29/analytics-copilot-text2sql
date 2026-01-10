@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import compileall
 from pathlib import Path
-import sys
 
 
 def _discover_python_files(root_dirs: list[Path]) -> list[Path]:

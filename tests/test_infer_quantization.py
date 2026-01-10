@@ -2,8 +2,6 @@ from pathlib import Path
 import sys
 from unittest import mock
 
-import pytest
-
 
 def _ensure_src_on_path() -> None:
     """Ensure that the 'src' directory is available on sys.path for imports."""
@@ -22,7 +20,7 @@ def test_load_model_for_inference_4bit_uses_quantization_config() -> None:
     actually downloading a model, and that it wires BitsAndBytesConfig through
     to AutoModelForCausalLM.from_pretrained.
     """
-    import text2sql.infer as infer  # noqa: WPS433  # isort: skip
+    import text2sql.infer as infer  # isort: skip
 
     with mock.patch.object(infer, "AutoTokenizer") as mock_tok_cls, \
         mock.patch.object(infer, "AutoModelForCausalLM") as mock_model_cls, \

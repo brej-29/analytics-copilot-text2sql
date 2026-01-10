@@ -1,8 +1,6 @@
 from pathlib import Path
 import sys
 
-import pytest
-
 
 def _ensure_root_on_path() -> None:
     """Ensure that the project root is available on sys.path for script imports."""

@@ -1,7 +1,7 @@
 """
 Utility script to publish QLoRA adapter artifacts to Hugging Face Hub.
 
-This script is designed to be **idempotent** and friendly to both local
+This script is designed to be idempotent and friendly to both local
 development environments and CI:
 
 - Validates that a Hugging Face token is available.
@@ -19,7 +19,7 @@ The script expects that you have already authenticated with Hugging Face, e.g.:
 
     huggingface-cli login
 
-or by setting an `HF_TOKEN` environment variable.
+or by setting an HF_TOKEN environment variable.
 """
 
 from __future__ import annotations
@@ -130,7 +130,10 @@ def _load_metrics(metrics_path: Path) -> Optional[Dict[str, Any]]:
     report-style payloads that wrap metrics under a 'metrics' key.
     """
     if not metrics_path.is_file():
-        logger.warning("Metrics file '%s' does not exist; skipping metrics section.", metrics_path)
+        logger.warning(
+            "Metrics file '%s' does not exist; skipping metrics section.",
+            metrics_path,
+        )
         return None
 
     try:
@@ -145,7 +148,10 @@ def _load_metrics(metrics_path: Path) -> Optional[Dict[str, Any]]:
         )
         return None
 
-    if isinstance(payload, dict) and "metrics" in payload and isinstance(payload["metrics"], dict):
+    if isinstance(payload, dict) and "metrics" in payload and isinstance(
+        payload["metrics"],
+        dict,
+    ):
         return payload["metrics"]
 
     if isinstance(payload, dict):
@@ -196,7 +202,10 @@ def _format_metrics_section(metrics: Dict[str, Any]) -> str:
     _fmt("schema_adherence", "Schema adherence rate")
 
     if not lines:
-        return "_Metrics JSON did not match the expected schema; see raw file for details._\n"
+        return (
+            "_Metrics JSON did not match the expected schema; "
+            "see raw file for details._\n"
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -219,9 +228,15 @@ def _ensure_readme(
     if metrics_path is not None:
         metrics = _load_metrics(metrics_path)
 
-    metrics_section = _format_metrics_section(metrics) if metrics else "_No metrics provided._\n"
+    metrics_section = (
+        _format_metrics_section(metrics)
+        if metrics
+        else "_No metrics provided._\n"
+    )
 
-    content = f"""# Analytics Copilot Text-to-SQL – QLoRA Adapter
+    # Use a triple-single-quoted f-string so we can include triple-double-quoted
+    # code samples without extra escaping.
+    content = f'''# Analytics Copilot Text-to-SQL – QLoRA Adapter
 
 This repository contains a **QLoRA adapter** for the
 `mistralai/Mistral-7B-Instruct-v0.1` model, fine-tuned for **text-to-SQL**
@@ -263,22 +278,22 @@ client = InferenceClient(
 
 system_prompt = "You are a careful text-to-SQL assistant. Return ONLY SQL."
 
-schema = \"\"\"CREATE TABLE orders (
+schema = """CREATE TABLE orders (
   id INTEGER PRIMARY KEY,
   customer_id INTEGER,
   amount NUMERIC,
   created_at TIMESTAMP
-);\"\"\"
+);"""
 
 question = "Total order amount per customer for the last 7 days."
 
-user_content = f\"\"\"### Schema:
-{schema}
+user_content = f"""### Schema:
+{{schema}}
 
 ### Question:
-{question}
+{{question}}
 
-Return only the SQL query.\"\"\"
+Return only the SQL query."""
 
 response = client.chat_completion(
     messages=[
@@ -338,13 +353,13 @@ model = PeftModel.from_pretrained(base_model, ADAPTER_REPO)
 model.eval()
 
 def generate_sql(schema: str, question: str) -> str:
-    prompt = f\"\"\"### Schema:
-{schema}
+    prompt = f"""### Schema:
+{{schema}}
 
 ### Question:
-{question}
+{{question}}
 
-Return only the SQL query.\"\"\"
+Return only the SQL query."""
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.no_grad():
         outputs = model.generate(
@@ -352,7 +367,10 @@ Return only the SQL query.\"\"\"
             max_new_tokens=256,
             do_sample=False,
         )
-    generated = tokenizer.decode(outputs[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    generated = tokenizer.decode(
+        outputs[0, inputs["input_ids"].shape[1]:],
+        skip_special_tokens=True,
+    )
     return generated.strip()
 ```
 
@@ -382,7 +400,7 @@ The following metrics were extracted from recent evaluation runs
 (e.g. internal validation on `b-mc2/sql-create-context` and/or Spider dev):
 
 {metrics_section}
-"""
+'''
 
     readme_path.write_text(content, encoding="utf-8")
     logger.info("Model card written to %s", readme_path)
@@ -425,7 +443,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             exist_ok=True,
             repo_type="model",
         )
-    except HfHubHTTPError as exc:
+    except HfHubHTTPError:
         logger.error(
             "Failed to create or access repository '%s' on Hugging Face Hub.",
             repo_id,

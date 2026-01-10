@@ -17,7 +17,7 @@ if str(SRC_DIR) not in sys.path:
 if TYPE_CHECKING:  # pragma: no cover - import only for type checking
     from datasets import Dataset, DatasetDict  # noqa: F401
 
-from text2sql.data_prep import format_record
+from text2sql.data_prep import format_record  # noqa: E402  # isort: skip
 
 
 logger = logging.getLogger(__name__)
@@ -386,7 +386,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     except (RuntimeError, ValueError) as exc:
         logger.error("Dataset build failed: %s", exc)
         return 1
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.error("Unexpected error during dataset build.", exc_info=True)
         return 1
 

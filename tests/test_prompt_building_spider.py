@@ -16,7 +16,6 @@ def _ensure_src_on_path() -> None:
 _ensure_src_on_path()
 
 from text2sql.eval.spider import (  # noqa: E402  # isort: skip
-    build_schema_map,
     build_spider_prompt,
     load_spider_schema_map,
     spider_schema_to_pseudo_ddl,
