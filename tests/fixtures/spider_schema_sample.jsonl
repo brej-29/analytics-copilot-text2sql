@@ -1,0 +1,3 @@
+{"db_id": "concert_singer", "create_table_context": "CREATE TABLE singer (singer_id INTEGER PRIMARY KEY, name TEXT, country TEXT); CREATE TABLE concert (concert_id INTEGER PRIMARY KEY, singer_id INTEGER, city TEXT, year INTEGER);"}
+{"db_id": "academic", "create_table_context": "CREATE TABLE professor (prof_id INTEGER PRIMARY KEY, name TEXT, age INTEGER, university_id INTEGER); CREATE TABLE university (university_id INTEGER PRIMARY KEY, name TEXT, city TEXT);"}
+{"db_id": "college_1", "create_table_context": "CREATE TABLE college (college_id INTEGER PRIMARY KEY, name TEXT, city TEXT);"}

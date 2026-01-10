@@ -24,6 +24,7 @@ venv/
 data/
 outputs/
 logs/
+reports/
 
 # OS / editor files
 .DS_Store

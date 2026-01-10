@@ -303,12 +303,15 @@ If you encounter CUDA OOM errors:
 
 ---
 
-## 6. External Validation (Spider dev) – Planned
+## 6. External Validation (Spider dev)
 
-After primary training on `b-mc2/sql-create-context`, we plan to perform
+After primary training on `b-mc2/sql-create-context`, we perform
 **secondary external validation** on the **Spider dev** split (e.g.,
 `xlangai/spider`), which is significantly more challenging (multi-table,
 cross-domain text-to-SQL).
 
-This will be implemented as a dedicated evaluation pipeline (Task 4). For the
-high-level plan, see [`docs/external_validation.md`](./external_validation.md).
+This is implemented via the Spider evaluation pipeline (Task 4). For details on
+datasets, metrics, and how to run the scripts, see:
+
+- [`docs/external_validation.md`](./external_validation.md)
+- [`docs/evaluation.md`](./evaluation.md)

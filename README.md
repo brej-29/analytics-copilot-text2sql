@@ -151,32 +151,92 @@ QLoRA/LoRA configuration, and troubleshooting (OOM, sequence length, etc.).
 
 ---
 
-## Evaluation (placeholder)
+## Evaluation
 
-> Evaluation scripts and methodology will be documented here later.
+The repository includes a lightweight but robust evaluation pipeline for
+text-to-SQL:
 
-Planned content for this section:
+- **Internal evaluation** on the processed `b-mc2/sql-create-context` val set.
+- **Secondary external validation** on the Spider dev split.
 
-- How to run evaluation on:
-  - WikiSQL test split.
-  - (Optional) Spider dev set.
-- Metrics:
-  - Logical form accuracy (exact SQL match).
-  - Execution accuracy (matching query results).
-  - Latency benchmarks (p50/p95).
-- How to generate evaluation reports under `docs/` or `outputs/`.
+See [`docs/evaluation.md`](./docs/evaluation.md) for full details. Below are the
+most common commands.
+
+### Internal Evaluation (b-mc2/sql-create-context val)
+
+Mock mode (no model required, exercises metrics/reporting):
+
+```bash
+python scripts/evaluate_internal.py --mock \
+  --val_path data/processed/val.jsonl \
+  --out_dir reports/
+```
+
+With a trained QLoRA adapter (GPU recommended):
+
+```bash
+python scripts/evaluate_internal.py \
+  --val_path data/processed/val.jsonl \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir /path/to/outputs/adapters \
+  --device auto \
+  --max_examples 200 \
+  --out_dir reports/
+```
+
+Outputs:
+
+- `reports/eval_internal.json` – metrics, config, and sample predictions.
+- `reports/eval_internal.md` – human-readable summary.
+
+### External Validation (Spider dev)
+
+Mock mode (offline fixtures only, no internet required):
+
+```bash
+python scripts/evaluate_spider_external.py --mock \
+  --out_dir reports/
+```
+
+Full Spider dev evaluation with a trained model (requires internet + HF Datasets):
+
+```bash
+python scripts/evaluate_spider_external.py \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir /path/to/outputs/adapters \
+  --device auto \
+  --spider_source xlangai/spider \
+  --schema_source richardr1126/spider-schema \
+  --spider_split validation \
+  --max_examples 200 \
+  --out_dir reports/
+```
+
+Outputs:
+
+- `reports/eval_spider.json` – metrics, config, and sample predictions.
+- `reports/eval_spider.md` – human-readable summary, including notes on
+  differences from official Spider evaluation.
 
 ---
 
-## External Validation (Spider dev) – planned
+## External Validation (Spider dev)
 
-After training on `b-mc2/sql-create-context`, we plan to add a secondary
-evaluation harness on the **Spider** dev set (e.g., `xlangai/spider`) to
-measure generalization to harder, multi-table, cross-domain text-to-SQL tasks.
+After training on `b-mc2/sql-create-context`, we run a secondary evaluation
+harness on the **Spider** dev set (e.g., `xlangai/spider`) to measure
+generalization to harder, multi-table, cross-domain text-to-SQL tasks.
 
-For the high-level plan, see [`docs/external_validation.md`](./docs/external_validation.md).
-_code
--new-</-
+Spider evaluation uses a **lightweight EM-style** metric suite:
+
+- Exact Match and No-values Exact Match on normalized SQL.
+- SQL parse success using `sqlglot`.
+- Schema adherence checks against serialized schemas from
+  `richardr1126/spider-schema` (licensed under **CC BY-SA 4.0**).
+
+Spider and its schema helper are used **only for evaluation**, not for
+training.
+
+For details, see [`docs/external_validation.md`](./docs/external_validation.md).
 ---
 
 ## Demo (placeholder)
@@ -200,24 +260,55 @@ Current high-level layout:
 
 ```text
 .
-├── app/                    # Streamlit app (to be implemented)
-├── docs/                   # Documentation, design notes, evaluation reports
-├── notebooks/              # Jupyter/Colab notebooks for experimentation
-├── scripts/                # CLI scripts (e.g., dataset loading, training, eval)
-│   └── smoke_load_dataset.py
+├── app/                        # Streamlit app (to be implemented)
+├── docs/                       # Documentation, design notes, evaluation reports
+│   ├── dataset.md
+│   ├── training.md
+│   ├── evaluation.md
+│   └── external_validation.md
+├── notebooks/                  # Jupyter/Colab notebooks for experimentation
+├── scripts/                    # CLI scripts (dataset, training, evaluation)
+│   ├── build_dataset.py
+│   ├── smoke_load_dataset.py
+│   ├── train_qlora.py
+│   ├── evaluate_internal.py
+│   └── evaluate_spider_external.py
 ├── src/
-│   └── text2sql/           # Core Python package
+│   └── text2sql/               # Core Python package
 │       ├── __init__.py
-│       └── utils/          # Utility modules (to be implemented)
-│           └── __init__.py
+│       ├── data_prep.py
+│       ├── infer.py
+│       ├── training/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   └── formatting.py
+│       └── eval/
+│           ├── __init__.py
+│           ├── normalize.py
+│           ├── schema.py
+│           ├── metrics.py
+│           └── spider.py
 ├── tests/
-│   └── test_repo_smoke.py  # Basic smoke test (imports the package)
-├── .env.example            # Example environment file
+│   ├── fixtures/
+│   │   ├── sql_create_context_sample.jsonl
+│   │   ├── eval_internal_sample.jsonl
+│   │   ├── spider_sample.jsonl
+│   │   └── spider_schema_sample.jsonl
+│   ├── test_repo_smoke.py
+│   ├── test_build_dataset_offline.py
+│   ├── test_data_prep.py
+│   ├── test_prompt_formatting.py
+│   ├── test_normalize_sql.py
+│   ├── test_schema_adherence.py
+│   ├── test_metrics_aggregate.py
+│   └── test_prompt_building_spider.py
+├── .env.example                # Example environment file
 ├── .gitignore
-├── context.md              # Persistent project context & decisions
+├── context.md                  # Persistent project context & decisions
 ├── LICENSE
 ├── README.md
 └── requirements.txt
 ```
 
-As the project progresses, this structure will be refined and additional modules, scripts, and documentation will be added.
+As the project progresses, this structure will be refined and additional modules,
+scripts, and documentation will be added.
