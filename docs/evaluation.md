@@ -126,6 +126,11 @@ Notes:
 
 - `--device auto` prefers GPU when available and falls back to CPU otherwise
   (with a warning).
+- By default, when running on CUDA the inference loader will try to load the
+  base model in **4-bit (bitsandbytes)** for faster and more memory-efficient
+  evaluation. You can explicitly control this with:
+  - `--load_in_4bit` / `--no_load_in_4bit`
+  - `--dtype` (default `auto`, which maps to `float16` on CUDA and `float32` on CPU)
 - `--max_examples` allows you to subsample the validation set for quick runs.
 - If you have a **merged model directory**, you can pass it as `--base_model`
   and omit `--adapter_dir`.
@@ -255,6 +260,11 @@ python scripts/evaluate_spider_external.py \
 
 Notes:
 
+- By default, when running on CUDA the inference loader will try to load the
+  base model in **4-bit (bitsandbytes)** for faster and more memory-efficient
+  evaluation. You can explicitly control this with:
+  - `--load_in_4bit` / `--no_load_in_4bit`
+  - `--dtype` (default `auto`, which maps to `float16` on CUDA and `float32` on CPU)
 - `--max_examples` allows a lighter-weight subset run (e.g., 50–200 examples).
 - When `--mock` is not set, the script downloads datasets via
   `datasets.load_dataset`, so internet access is required.
@@ -269,12 +279,15 @@ Both evaluation scripts rely on a shared inference helper:
 
 Key functions:
 
-- `load_model_for_inference(base_model, adapter_dir=None, device='auto')`
+- `load_model_for_inference(base_model, adapter_dir=None, device='auto', load_in_4bit=None, bnb_compute_dtype='float16', dtype='auto')`
   - Loads a base HF model or local directory.
   - Optionally applies LoRA adapters from `adapter_dir`.
   - Resolves device via:
     - `"auto"` → GPU if available, otherwise CPU (with a warning).
     - `"cuda"` / `"cpu"` for explicit control.
+  - When running on CUDA and `load_in_4bit` is not explicitly set, the loader
+    defaults to 4-bit (NF4) quantization using bitsandbytes. This significantly
+    reduces memory usage and speeds up evaluation on Colab-style GPUs.
 
 - `generate_sql(prompt, max_new_tokens, temperature, top_p) -> str`
   - Uses the loaded model/tokenizer to generate text.
@@ -309,3 +322,9 @@ pytest -q
 
 without requiring internet access or GPU hardware. For full model-based
 evaluation, see the commands in sections 1.3.2 and 2.4.2 above.
+
+If you see TensorFlow CUDA warnings in Colab logs (e.g. about missing
+`libcudart`), they can generally be ignored for this project. The evaluation
+scripts also set `TF_CPP_MIN_LOG_LEVEL=3` to suppress most TensorFlow log
+noise; you can optionally uninstall TensorFlow entirely if you are not using
+it elsewhere in your notebook.

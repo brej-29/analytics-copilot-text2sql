@@ -1,11 +1,15 @@
 import argparse
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import sys
+
+# Reduce TensorFlow/CUDA log noise if TensorFlow is installed.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 # Ensure the src/ directory is on sys.path so that `text2sql` can be imported
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,9 +46,10 @@ class SpiderEvalConfig:
     top_p: float
     max_new_tokens: int
     mock: bool
+    load_in_4bit: Optional[bool]
+    dtype: str
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+    def todict(self)
 
 
 def configure_logging() -> None:
@@ -130,6 +135,32 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=int,
         default=256,
         help="Maximum number of new tokens to generate.",
+    )
+    parser.add_argument(
+        "--load_in_4bit",
+        action="store_true",
+        default=None,
+        help=(
+            "If set, force loading the base model in 4-bit (bitsandbytes) for "
+            "faster and more memory-efficient inference. By default this is "
+            "enabled automatically when running on CUDA and disabled on CPU."
+        ),
+    )
+    parser.add_argument(
+        "--no_load_in_4bit",
+        action="store_false",
+        dest="load_in_4bit",
+        help="Disable 4-bit loading even when running on CUDA.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "float16", "bfloat16", "float32"],
+        help=(
+            "Model dtype for base weights. 'auto' selects float16 on CUDA and "
+            "float32 on CPU."
+        ),
     )
     parser.add_argument(
         "--mock",
@@ -469,14 +500,21 @@ def run_eval(args: argparse.Namespace) -> int:
         )
 
         logger.info(
-            "Loading model for inference with base_model=%s, adapter_dir=%s",
+            "Loading model for inference with base_model=%s, adapter_dir=%s, "
+            "device=%s, load_in_4bit=%s, dtype=%s",
             args.base_model,
             args.adapter_dir,
+            args.device,
+            args.load_in_4bit,
+            args.dtype,
         )
         load_model_for_inference(
             base_model=args.base_model,
             adapter_dir=args.adapter_dir,
             device=args.device,
+            load_in_4bit=args.load_in_4bit,
+            bnb_compute_dtype="float16",
+            dtype=args.dtype,
         )
 
         for idx, (db_id, question, schema_context) in enumerate(

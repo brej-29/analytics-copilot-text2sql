@@ -15,6 +15,33 @@ _TOKENIZER: Optional[PreTrainedTokenizerBase] = None
 _DEVICE: Optional[str] = None
 
 
+def _resolve_torch_dtype(dtype: str, device: str) -> torch.dtype:
+    """
+    Resolve a string dtype name to a torch.dtype, with an 'auto' option.
+
+    - 'auto' → float16 on CUDA, float32 on CPU.
+    - Accepts common aliases like 'fp16'/'bf16'/'fp32'.
+    """
+    dtype_normalized = (dtype or "auto").lower()
+    if dtype_normalized == "auto":
+        return torch.float16 if device == "cuda" else torch.float32
+
+    mapping = {
+        "float16": torch.float16,
+        "fp16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+    }
+    try:
+        return mapping[dtype_normalized]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported dtype '{dtype}'. Expected one of: auto, float16, bfloat16, float32."
+        ) from exc
+
+
 def _select_device(device: str) -> str:
     """
     Resolve the requested device string to an actual device ("cpu" or "cuda").
@@ -46,6 +73,9 @@ def load_model_for_inference(
     base_model: str,
     adapter_dir: Optional[str] = None,
     device: str = "auto",
+    load_in_4bit: Optional[bool] = None,
+    bnb_compute_dtype: str = "float16",
+    dtype: str = "auto",
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """
     Load a base model and optional LoRA adapters for text-to-SQL inference.
@@ -65,6 +95,17 @@ def load_model_for_inference(
     device : str, optional
         "auto", "cuda", or "cpu". If "auto", prefer CUDA when available,
         otherwise fall back to CPU.
+    load_in_4bit : Optional[bool], optional
+        If True, attempt to load the base model using 4-bit quantization
+        (bitsandbytes). If None, 4-bit is enabled automatically when running
+        on CUDA and disabled otherwise.
+    bnb_compute_dtype : str, optional
+        Compute dtype for 4-bit quantization (e.g. "float16", "bfloat16").
+        Defaults to "float16".
+    dtype : str, optional
+        Torch dtype for the base model weights ("auto", "float16",
+        "bfloat16", or "float32"). "auto" resolves to float16 on CUDA and
+        float32 on CPU.
 
     Returns
     -------
@@ -74,11 +115,21 @@ def load_model_for_inference(
     global _MODEL, _TOKENIZER, _DEVICE
 
     resolved_device = _select_device(device)
+
+    # Decide whether to enable 4-bit quantization.
+    use_4bit = load_in_4bit
+    if use_4bit is None:
+        use_4bit = resolved_device == "cuda"
+
     logger.info(
-        "Loading model for inference: base_model=%s, adapter_dir=%s, device=%s",
+        "Loading model for inference: base_model=%s, adapter_dir=%s, device=%s, "
+        "load_in_4bit=%s, dtype=%s, bnb_compute_dtype=%s",
         base_model,
         adapter_dir,
         resolved_device,
+        use_4bit,
+        dtype,
+        bnb_compute_dtype,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir or base_model)
@@ -86,9 +137,58 @@ def load_model_for_inference(
         # Many causal LM tokenizers do not have an explicit pad token; use EOS.
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    # Use float16 on GPU and float32 on CPU for simplicity.
-    torch_dtype = torch.float16 if resolved_device == "cuda" else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=torch_dtype)
+    torch_dtype = _resolve_torch_dtype(dtype, resolved_device)
+
+    if use_4bit and resolved_device != "cuda":
+        logger.warning(
+            "4-bit quantization was requested (load_in_4bit=True) but device is '%s'. "
+            "Disabling 4-bit and using dtype %s instead.",
+            resolved_device,
+            torch_dtype,
+        )
+        use_4bit = False
+
+    if use_4bit:
+        # Lazy import to avoid introducing a hard dependency for non-4bit users.
+        try:
+            from transformers import BitsAndBytesConfig
+        except ImportError as exc:  # pragma: no cover - environment-specific
+            raise ImportError(
+                "4-bit quantization requested, but transformers.BitsAndBytesConfig "
+                "is not available. Ensure you have a recent transformers and "
+                "bitsandbytes installed, or disable 4-bit loading."
+            ) from exc
+
+        compute_dtype = _resolve_torch_dtype(bnb_compute_dtype, resolved_device)
+
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=compute_dtype,
+        )
+
+        logger.info(
+            "Using 4-bit NF4 quantization for base model with torch_dtype=%s and "
+            "compute_dtype=%s.",
+            torch_dtype,
+            compute_dtype,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model,
+            quantization_config=quant_config,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+            torch_dtype=torch_dtype,
+        )
+    else:
+        # Standard full-precision / mixed-precision loading.
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model,
+            torch_dtype=torch_dtype,
+        )
+        model.to(resolved_device)
 
     if adapter_dir:
         adapter_path = Path(adapter_dir)
@@ -100,7 +200,6 @@ def load_model_for_inference(
         logger.info("Loading LoRA adapters from %s", adapter_dir)
         model = PeftModel.from_pretrained(model, adapter_dir)
 
-    model.to(resolved_device)
     model.eval()
 
     _MODEL = model
