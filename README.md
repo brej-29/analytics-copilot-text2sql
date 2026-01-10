@@ -116,16 +116,38 @@ details on the raw dataset, the train/val split strategy, and the output format.
 
 ---
 
-## Training (placeholder)
+## Training (QLoRA)
 
-> Detailed training instructions will be added once the training pipeline is implemented.
+We provide two main paths for QLoRA fine-tuning:
 
-Planned content for this section:
+1. A detailed, Colab-friendly notebook:
+   - `notebooks/finetune_mistral7b_qlora_text2sql.ipynb`
+2. A reproducible CLI script:
+   - `scripts/train_qlora.py`
 
-- How to run QLoRA fine-tuning on Mistral-7B using the processed JSONL files.
-- Recommended hyperparameters and hardware setup.
-- Checkpointing, resuming, and logging (e.g., Weights & Biases or HF Hub).
-- Exporting and pushing the trained model/adapters to Hugging Face Hub.
+Basic usage:
+
+```bash
+# Dry run: load config + dataset, format a small batch, and exit
+python scripts/train_qlora.py --dry_run
+
+# Smoke run: validate dataset + config; model loading is skipped on CPU-only environments
+python scripts/train_qlora.py --smoke
+
+# Full training example (requires a GPU with sufficient VRAM)
+python scripts/train_qlora.py \
+  --train_path data/processed/train.jsonl \
+  --val_path data/processed/val.jsonl \
+  --output_dir outputs/ \
+  --max_steps 500 \
+  --per_device_train_batch_size 1 \
+  --gradient_accumulation_steps 8 \
+  --learning_rate 2e-4 \
+  --max_seq_length 2048
+```
+
+See [`docs/training.md`](./docs/training.md) for details on hyperparameters,
+QLoRA/LoRA configuration, and troubleshooting (OOM, sequence length, etc.).
 
 ---
 
@@ -144,6 +166,17 @@ Planned content for this section:
   - Latency benchmarks (p50/p95).
 - How to generate evaluation reports under `docs/` or `outputs/`.
 
+---
+
+## External Validation (Spider dev) – planned
+
+After training on `b-mc2/sql-create-context`, we plan to add a secondary
+evaluation harness on the **Spider** dev set (e.g., `xlangai/spider`) to
+measure generalization to harder, multi-table, cross-domain text-to-SQL tasks.
+
+For the high-level plan, see [`docs/external_validation.md`](./docs/external_validation.md).
+_code
+-new-</-
 ---
 
 ## Demo (placeholder)

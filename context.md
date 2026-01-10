@@ -117,6 +117,8 @@ This repo will contain:
 - **2026-01-10** – Switched the primary training dataset from `Salesforce/wikisql` (script-based, incompatible with `datasets>=4`) to **`b-mc2/sql-create-context`**, which is backed by parquet data files and provides natural-language questions, `CREATE TABLE` context, and SQL answers ideal for text-to-SQL.
 - **2026-01-10** – Chose to rely on the `CREATE TABLE` context in `b-mc2/sql-create-context` as a primary mechanism to reduce schema hallucinations during text-to-SQL generation, by always conditioning the model on the explicit schema.
 - **2026-01-10** – Decided to create our own deterministic validation split (default 8% of the data, seed=42) from the single `train` split shipped with `b-mc2/sql-create-context`, to enable reproducible model selection and early-stopping.
+- **2026-01-10** – Selected **`mistralai/Mistral-7B-Instruct-v0.1`** as the base model for fine-tuning, using **QLoRA (4-bit) + LoRA adapters** implemented via **Unsloth + bitsandbytes** for efficient training on a single GPU.
+- **2026-01-10** – Planned a **secondary external validation** step on **Spider dev** (e.g., `xlangai/spider`) after primary training on `b-mc2/sql-create-context`, to measure cross-domain, multi-table generalization.
 
 ---
 
@@ -130,3 +132,4 @@ This repo will contain:
   - Added basic pytest smoke test to verify that the `text2sql` package imports successfully.
 - **2026-01-10** – Updated dataset plan and smoke loader to use the parquet-backed **`b-mc2/sql-create-context`** dataset (compatible with `datasets>=4`) instead of the script-based `Salesforce/wikisql`, and documented this decision in the project context.
 - **2026-01-10** – Added a dataset preprocessing pipeline (`scripts/build_dataset.py`) that converts `b-mc2/sql-create-context` into Alpaca-style instruction-tuning JSONL files under `data/processed/` (train/val splits), along with reusable formatting utilities in `text2sql.data_prep`.
+- **2026-01-10** – Added QLoRA training scaffolding: a detailed Colab-friendly notebook (`notebooks/finetune_mistral7b_qlora_text2sql.ipynb`), a reproducible training script (`scripts/train_qlora.py`), training utilities under `src/text2sql/training/`, and documentation for training (`docs/training.md`) plus planned external validation on Spider dev (`docs/external_validation.md`).LoRA training scaffolding: a detailed Colab-friendly notebook (`notebooks/finetune_mistral7b_qlora_text2sql.ipynb`), a reproducible training script (`scripts/train_qlora.py`), training utilities under `src`.
