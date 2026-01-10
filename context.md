@@ -119,6 +119,7 @@ This repo will contain:
 - **2026-01-10** – Decided to create our own deterministic validation split (default 8% of the data, seed=42) from the single `train` split shipped with `b-mc2/sql-create-context`, to enable reproducible model selection and early-stopping.
 - **2026-01-10** – Selected **`mistralai/Mistral-7B-Instruct-v0.1`** as the base model for fine-tuning, using **QLoRA (4-bit) + LoRA adapters** implemented via **Unsloth + bitsandbytes** for efficient training on a single GPU.
 - **2026-01-10** – Planned a **secondary external validation** step on **Spider dev** (e.g., `xlangai/spider`) after primary training on `b-mc2/sql-create-context`, to measure cross-domain, multi-table generalization.
+- **2026-01-10** – Decided to implement a reusable evaluation pipeline with shared normalization, schema adherence checks, and metrics under `src/text2sql/eval/`, plus an inference wrapper for loading base models and QLoRA adapters for text-to-SQL generation.
 
 ---
 
@@ -132,4 +133,10 @@ This repo will contain:
   - Added basic pytest smoke test to verify that the `text2sql` package imports successfully.
 - **2026-01-10** – Updated dataset plan and smoke loader to use the parquet-backed **`b-mc2/sql-create-context`** dataset (compatible with `datasets>=4`) instead of the script-based `Salesforce/wikisql`, and documented this decision in the project context.
 - **2026-01-10** – Added a dataset preprocessing pipeline (`scripts/build_dataset.py`) that converts `b-mc2/sql-create-context` into Alpaca-style instruction-tuning JSONL files under `data/processed/` (train/val splits), along with reusable formatting utilities in `text2sql.data_prep`.
-- **2026-01-10** – Added QLoRA training scaffolding: a detailed Colab-friendly notebook (`notebooks/finetune_mistral7b_qlora_text2sql.ipynb`), a reproducible training script (`scripts/train_qlora.py`), training utilities under `src/text2sql/training/`, and documentation for training (`docs/training.md`) plus planned external validation on Spider dev (`docs/external_validation.md`).LoRA training scaffolding: a detailed Colab-friendly notebook (`notebooks/finetune_mistral7b_qlora_text2sql.ipynb`), a reproducible training script (`scripts/train_qlora.py`), training utilities under `src`.
+- **2026-01-10** – Added QLoRA training scaffolding: a detailed Colab-friendly notebook (`notebooks/finetune_mistral7b_qlora_text2sql.ipynb`), a reproducible training script (`scripts/train_qlora.py`), training utilities under `src/text2sql/training/`, and documentation for training (`docs/training.md`) plus planned external validation on Spider dev (`docs/external_validation.md`).
+- **2026-01-10** – Implemented Task 4: a unified evaluation pipeline with:
+  - Shared normalization, schema parsing, and metrics (`src/text2sql/eval/`).
+  - An inference wrapper for loading base models and QLoRA adapters (`src/text2sql/infer.py`).
+  - Internal evaluation script on the processed validation set (`scripts/evaluate_internal.py`).
+  - Secondary external validation on Spider dev using `xlangai/spider` and `richardr1126/spider-schema` (`scripts/evaluate_spider_external.py`).
+  - Documentation of evaluation and external validation (`docs/evaluation.md`, updated `docs/external_validation.md`, `README.md`), plus new tests and fixtures so that pytest can run fully offline.

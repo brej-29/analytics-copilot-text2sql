@@ -1,0 +1,4 @@
+{"db_id": "simple_company", "question": "List the names of all employees.", "query": "SELECT name FROM employee"}
+{"db_id": "simple_company", "question": "How many employees are older than 30?", "query": "SELECT COUNT(*) FROM employee WHERE age > 30"}
+{"db_id": "school", "question": "Show the names of all students.", "query": "SELECT name FROM student"}
+{"db_id": "school", "question": "What is the average score of all exams?", "query": "SELECT AVG(score) FROM exam"}

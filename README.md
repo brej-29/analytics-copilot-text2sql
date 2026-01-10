@@ -151,32 +151,108 @@ QLoRA/LoRA configuration, and troubleshooting (OOM, sequence length, etc.).
 
 ---
 
-## Evaluation (placeholder)
+## Evaluation
 
-> Evaluation scripts and methodology will be documented here later.
+The project includes a small but robust evaluation pipeline for both internal
+and external validation.
 
-Planned content for this section:
+### Internal Evaluation (b-mc2/sql-create-context val)
 
-- How to run evaluation on:
-  - WikiSQL test split.
-  - (Optional) Spider dev set.
-- Metrics:
-  - Logical form accuracy (exact SQL match).
-  - Execution accuracy (matching query results).
-  - Latency benchmarks (p50/p95).
-- How to generate evaluation reports under `docs/` or `outputs/`.
+After training, you can evaluate the model on the processed validation split
+(`data/processed/val.jsonl`) using:
+
+```bash
+# Mock run (no model; uses a small fixture and gold SQL as predictions)
+python scripts/evaluate_internal.py \
+  --val_path tests/fixtures/eval_internal_sample.jsonl \
+  --mock \
+  --out_dir reports
+
+# Full run (requires trained adapters and a GPU)
+python scripts/evaluate_internal.py \
+  --val_path data/processed/val.jsonl \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir /path/to/qlora/adapters \
+  --device cuda \
+  --max_examples 200 \
+  --out_dir reports
+```
+
+The script writes:
+
+- `reports/eval_internal.json` – configuration, metrics, and example rows.
+- `reports/eval_internal.md` – human-readable summary with metrics and
+  example predictions.
+
+Core metrics:
+
+- **Exact Match (normalized SQL)** – strip whitespace, remove trailing
+  semicolons, collapse internal whitespace.
+- **No-values Exact Match** – same as above, but with literals (strings and
+  numbers) abstracted away.
+- **SQL parse success rate** – fraction of predictions parsable by `sqlglot`.
+- **Schema adherence rate** – fraction of predictions that reference only
+  tables/columns present in the provided `CREATE TABLE` schema.
+
+### External Validation (Spider dev)
+
+As a secondary generalization check, we evaluate on the **Spider** dev set
+using:
+
+- Text-to-SQL pairs from `xlangai/spider` (dev/validation split).
+- Schemas from `richardr1126/spider-schema`, converted into `CREATE TABLE`
+  DDL context per database.
+
+Run the external evaluation with:
+
+```bash
+# Mock run (offline; uses local Spider fixtures and gold SQL as predictions)
+python scripts/evaluate_spider_external.py \
+  --mock \
+  --max_examples 4 \
+  --out_dir reports
+
+# Full run (requires trained adapters, internet, and preferably a GPU)
+python scripts/evaluate_spider_external.py \
+  --base_model mistralai/Mistral-7B-Instruct-v0.1 \
+  --adapter_dir /path/to/qlora/adapters \
+  --device cuda \
+  --spider_source xlangai/spider \
+  --schema_source richardr1126/spider-schema \
+  --spider_split validation \
+  --max_examples 200 \
+  --out_dir reports
+```
+
+This script writes:
+
+- `reports/eval_spider.json` – configuration, metrics, and example rows.
+- `reports/eval_spider.md` – narrative report with schema snippets and
+  example predictions.
+
+Metrics focus on:
+
+- Normalized exact match.
+- No-values exact match.
+- SQL parse success rate.
+
+> Note: Official Spider evaluations also report component-level matching and
+> execution accuracy. Our pipeline provides a **lightweight external
+> validation** suitable for development and portfolio reporting, not direct
+> leaderboard comparison.
+
+For full details of the evaluation pipeline, see
+[`docs/evaluation.md`](./docs/evaluation.md).
 
 ---
 
-## External Validation (Spider dev) – planned
+## External Validation (Spider dev)
 
-After training on `b-mc2/sql-create-context`, we plan to add a secondary
-evaluation harness on the **Spider** dev set (e.g., `xlangai/spider`) to
-measure generalization to harder, multi-table, cross-domain text-to-SQL tasks.
+Secondary external validation on the Spider dev set is implemented in Task 4
+via `scripts/evaluate_spider_external.py`. For design details and how this
+relates to the core training setup, see
+[`docs/external_validation.md`](./docs/external_validation.md).
 
-For the high-level plan, see [`docs/external_validation.md`](./docs/external_validation.md).
-_code
--new-</-
 ---
 
 ## Demo (placeholder)

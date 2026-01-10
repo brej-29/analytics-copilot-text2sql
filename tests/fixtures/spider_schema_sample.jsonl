@@ -1,0 +1,2 @@
+{"db_id": "simple_company", "Schema (values (type))": "|simple_company|employee : id (number) , name (text) , age (number)|"}
+{"db_id": "school", "Schema (values (type))": "|school|student : id (number) , name (text)| exam : id (number) , student_id (number) , score (number)|"}
