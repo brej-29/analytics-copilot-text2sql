@@ -49,7 +49,8 @@ class SpiderEvalConfig:
     load_in_4bit: Optional[bool]
     dtype: str
 
-    def todict(self)
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 def configure_logging() -> None:

@@ -237,7 +237,25 @@ Spider and its schema helper are used **only for evaluation**, not for
 training.
 
 For details, see [`docs/external_validation.md`](./docs/external_validation.md).
+
 ---
+
+## Local Development & QA
+
+For a quick local quality check before pushing changes, you can run:
+
+```bash
+# 1) Syntax validation across src/, scripts/, and app/
+python scripts/check_syntax.py
+
+# 2) Linting (requires ruff to be installed, e.g. `pip install ruff`)
+ruff check .
+
+# 3) Test suite (offline-friendly)
+pytest -q
+```
+
+These commands are also wired into the CI workflow (`.github/workflows/ci.yml`).
 
 ## Demo (placeholder)
 

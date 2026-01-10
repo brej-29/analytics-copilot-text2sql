@@ -40,6 +40,8 @@ class EvalConfig:
     top_p: float
     max_new_tokens: int
     mock: bool
+    load_in_4bit: Optional[bool]
+    dtype: str
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -340,7 +342,6 @@ def run_eval(args: argparse.Namespace) -> int:
         mock=args.mock,
         load_in_4bit=args.load_in_4bit,
         dtype=args.dtype,
- _code  new </)
     )
 
     gold_sqls: List[str] = []
