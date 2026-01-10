@@ -46,8 +46,8 @@ class SpiderEvalConfig:
     top_p: float
     max_new_tokens: int
     mock: bool
-    load_in_4bit: Optional[bool]
-    dtype: str
+    load_in_4bit: Optional[bool] = None
+    dtype: str = "auto"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
