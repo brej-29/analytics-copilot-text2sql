@@ -19,6 +19,7 @@ venv/
 # Environment / secrets
 .env
 *.env
+.streamlit/secrets.toml
 
 # Data and outputs
 data/

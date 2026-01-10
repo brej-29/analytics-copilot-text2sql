@@ -74,6 +74,8 @@ def load_model_for_inference(
     adapter_dir: Optional[str] = None,
     device: str = "auto",
     load_in_4bit: Optional[bool] = None,
+    bnb_4bit_quant_type: str = "nf4",
+    bnb_4bit_use_double_quant: bool = True,
     bnb_compute_dtype: str = "float16",
     dtype: str = "auto",
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizerBase]:
@@ -99,6 +101,10 @@ def load_model_for_inference(
         If True, attempt to load the base model using 4-bit quantization
         (bitsandbytes). If None, 4-bit is enabled automatically when running
         on CUDA and disabled otherwise.
+    bnb_4bit_quant_type : str, optional
+        Quantization type for 4-bit weights (e.g. "nf4", "fp4"). Defaults to "nf4".
+    bnb_4bit_use_double_quant : bool, optional
+        Whether to use nested (double) quantization for 4-bit weights. Defaults to True.
     bnb_compute_dtype : str, optional
         Compute dtype for 4-bit quantization (e.g. "float16", "bfloat16").
         Defaults to "float16".
@@ -123,13 +129,16 @@ def load_model_for_inference(
 
     logger.info(
         "Loading model for inference: base_model=%s, adapter_dir=%s, device=%s, "
-        "load_in_4bit=%s, dtype=%s, bnb_compute_dtype=%s",
+        "load_in_4bit=%s, dtype=%s, bnb_compute_dtype=%s, bnb_4bit_quant_type=%s, "
+        "bnb_4bit_use_double_quant=%s",
         base_model,
         adapter_dir,
         resolved_device,
         use_4bit,
         dtype,
         bnb_compute_dtype,
+        bnb_4bit_quant_type,
+        bnb_4bit_use_double_quant,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir or base_model)
@@ -163,16 +172,18 @@ def load_model_for_inference(
 
         quant_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type=bnb_4bit_quant_type,
+            bnb_4bit_use_double_quant=bnb_4bit_use_double_quant,
             bnb_4bit_compute_dtype=compute_dtype,
         )
 
         logger.info(
-            "Using 4-bit NF4 quantization for base model with torch_dtype=%s and "
-            "compute_dtype=%s.",
+            "Using 4-bit quantization for base model with torch_dtype=%s, "
+            "compute_dtype=%s, quant_type=%s, double_quant=%s.",
             torch_dtype,
             compute_dtype,
+            bnb_4bit_quant_type,
+            bnb_4bit_use_double_quant,
         )
 
         model = AutoModelForCausalLM.from_pretrained(

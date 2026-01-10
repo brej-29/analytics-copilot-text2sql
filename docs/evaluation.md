@@ -130,8 +130,13 @@ Notes:
   base model in **4-bit (bitsandbytes)** for faster and more memory-efficient
   evaluation. You can explicitly control this with:
   - `--load_in_4bit` / `--no_load_in_4bit`
+  - `--bnb_4bit_quant_type`, `--bnb_4bit_compute_dtype`, and
+    `--bnb_4bit_use_double_quant` for advanced 4-bit configuration.
   - `--dtype` (default `auto`, which maps to `float16` on CUDA and `float32` on CPU)
 - `--max_examples` allows you to subsample the validation set for quick runs.
+- `--smoke` evaluates only a small handful of validation examples; on CPU-only
+  environments it automatically falls back to `--mock` to avoid loading the
+  large model while still exercising the metrics/reporting pipeline.
 - If you have a **merged model directory**, you can pass it as `--base_model`
   and omit `--adapter_dir`.
 
@@ -279,15 +284,19 @@ Both evaluation scripts rely on a shared inference helper:
 
 Key functions:
 
-- `load_model_for_inference(base_model, adapter_dir=None, device='auto', load_in_4bit=None, bnb_compute_dtype='float16', dtype='auto')`
+- `load_model_for_inference(base_model, adapter_dir=None, device='auto', load_in_4bit=None, bnb_4bit_quant_type='nf4', bnb_4bit_use_double_quant=True, bnb_compute_dtype='float16', dtype='auto')`
   - Loads a base HF model or local directory.
   - Optionally applies LoRA adapters from `adapter_dir`.
   - Resolves device via:
     - `"auto"` → GPU if available, otherwise CPU (with a warning).
     - `"cuda"` / `"cpu"` for explicit control.
   - When running on CUDA and `load_in_4bit` is not explicitly set, the loader
-    defaults to 4-bit (NF4) quantization using bitsandbytes. This significantly
-    reduces memory usage and speeds up evaluation on Colab-style GPUs.
+    defaults to 4-bit quantization using bitsandbytes (NF4 + double-quant by
+    default). This significantly reduces memory usage and speeds up evaluation
+    on Colab-style GPUs.
+  - The `bnb_4bit_*` arguments allow you to tune quantization behavior when
+    needed (e.g. quantization type, compute dtype, and whether double quant is
+    used).
 
 - `generate_sql(prompt, max_new_tokens, temperature, top_p) -> str`
   - Uses the loaded model/tokenizer to generate text.
