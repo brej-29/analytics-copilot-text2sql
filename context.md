@@ -1,0 +1,127 @@
+# Analytics Copilot (Text-to-SQL) – Mistral-7B QLoRA
+
+## 1) Project Summary (what we are building)
+
+We are building an **Analytics Copilot** that allows business and data users to query structured data (e.g., data warehouse tables) using **natural language**, which is translated into **SQL** and executed against a database. The core of the system will be a **Mistral-7B-based model fine-tuned with QLoRA** for text-to-SQL generation, combined with a lightweight retrieval and schema-understanding layer, plus a Streamlit UI for interactive exploration.
+
+Key capabilities (target state):
+- Accept natural-language questions about tabular data.
+- Generate syntactically valid and semantically correct SQL against a known schema.
+- Execute queries safely (read-only, resource-limited) and visualize results.
+- Provide explanations of the generated SQL for transparency and debugging.
+- Support iterative refinement: user can edit SQL or ask follow-up questions.
+
+This repo will contain:
+- Data loading and preprocessing pipelines.
+- Training and evaluation scripts/notebooks for text-to-SQL with QLoRA on Mistral-7B.
+- A simple evaluation harness and metrics reporting.
+- A Streamlit-based demo app showcasing the Analytics Copilot.
+
+---
+
+## 2) Final Deliverables (HF model, Streamlit app, repo, metrics)
+
+**Model & Artifacts**
+- A trained text-to-SQL model based on **Mistral-7B** fine-tuned via **QLoRA** on WikiSQL.
+- Model uploaded to **Hugging Face Hub** (public or private), including:
+  - Model weights and adapter (QLoRA) weights.
+  - Model card documenting training data, evaluation metrics, and usage instructions.
+
+**Application**
+- **Streamlit UI** for the Analytics Copilot that:
+  - Lets users configure DB connection or select a demo schema.
+  - Accepts natural-language questions and displays:
+    - Generated SQL.
+    - Query results (table, possibly charts).
+    - Optional explanation/rationale.
+
+**Repository**
+- Production-grade, well-structured repo with:
+  - Reproducible environment (requirements.txt / Docker later).
+  - Scripts for dataset download, preprocessing, training, evaluation, and inference.
+  - Tests (unit + smoke) and basic CI hooks (later).
+  - Documentation in `README.md` and `docs/`.
+
+**Metrics & Reports**
+- Evaluation report(s) including:
+  - Text-to-SQL accuracy metrics on WikiSQL (and optionally Spider dev).
+  - Latency measurements for inference (end-to-end from NL query to DB result).
+  - Resource + training-time summary (GPU hours, batch size, etc.).
+
+---
+
+## 3) Success Metrics (latency target, training time target, quality metrics)
+
+**Latency Targets (inference)**
+- **Cold-start latency** (first query after model load):
+  - Target: &lt; 8 seconds on a single GPU with 7B model + QLoRA adapter.
+- **Steady-state latency** (subsequent queries):
+  - Target: **p50 &lt; 1.5s**, **p95 &lt; 3s** per query (text → SQL only, excluding DB execution).
+
+**Training Efficiency**
+- **Training time target**:
+  - Full QLoRA fine-tuning on WikiSQL should complete in **≤ 8 GPU-hours** on a single modern GPU (e.g., A10/A100/L4 class) with mixed-precision and reasonable hyperparameters.
+- Clear documentation of:
+  - Hardware used.
+  - Epochs, batch size, LR schedule, and total tokens seen.
+
+**Quality Metrics**
+- On **WikiSQL** test split:
+  - **Logical form accuracy** (exact match of SQL) ≥ 75%.
+  - **Execution accuracy** (correct result when executed) ≥ 85%.
+- On **Spider dev** (optional stretch goal):
+  - Report standard text-to-SQL metrics (exact set TBC later).
+- Qualitative success:
+  - Generated SQL is usually **readable**, follows schema, and fails safely when unsure.
+
+---
+
+## 4) Dataset Plan
+
+**Training Dataset**
+- **WikiSQL**:
+  - Source: Hugging Face Datasets → `"Salesforce/wikisql"`.
+  - Description: Natural-language questions paired with SQL queries over Wikipedia tables.
+  - Usage in this project:
+    - Primary training dataset for the text-to-SQL model.
+    - May apply light preprocessing:
+      - Normalize or canonicalize SQL.
+      - Add schema context features (e.g., column names) to the input prompt.
+      - Filter out pathological or broken examples if necessary.
+
+**Evaluation Dataset (optional later)**
+- **Spider dev**:
+  - Source: Standard Spider dataset (Hugging Face or official distribution).
+  - Description: Complex, multi-table text-to-SQL benchmark.
+  - Planned usage:
+    - Optional out-of-domain evaluation to see how well the model generalizes beyond WikiSQL.
+    - Might require a separate evaluation harness and schema-serialization strategy.
+
+**General Dataset Strategy**
+- Keep dataset handling **reproducible**:
+  - Versioned dataset scripts.
+  - Clear documentation of any filters and preprocessing.
+- Use Hugging Face Datasets where possible for:
+  - Easy download/caching.
+  - Integration with training pipelines (map/filter/shuffle, streaming if needed).
+
+---
+
+## 5) Decisions Log (dated bullet points)
+
+- **2026-01-10** – Chose **WikiSQL (Salesforce/wikisql)** on Hugging Face as the primary training dataset; Spider dev considered as optional evaluation dataset.
+- **2026-01-10** – Adopted **Mistral-7B + QLoRA** as the base modeling approach for the Analytics Copilot (Text-to-SQL).
+- **2026-01-10** – Selected a **`src/`-based layout** (`src/text2sql`) and Python tooling centered on `requirements.txt` (instead of pyproject.toml) for simpler initial setup.
+- **2026-01-10** – Decided to build a **Streamlit** app as the primary UI for the Analytics Copilot demo.
+- **2026-01-10** – Introduced a **dataset smoke test script** (`scripts/smoke_load_dataset.py`) to verify access to WikiSQL via Hugging Face Datasets early in the project.
+
+---
+
+## 6) Change Log (append-only; every future task must add an entry)
+
+- **2026-01-10** – Initial project scaffolding created:
+  - Added repo structure (app/, notebooks/, scripts/, src/text2sql/, tests/, docs/).
+  - Added `context.md` to serve as the persistent project context.
+  - Added `requirements.txt`, `.gitignore`, `.env.example`, and `README.md` skeleton.
+  - Implemented `scripts/smoke_load_dataset.py` for WikiSQL dataset access smoke testing.
+  - Added basic pytest smoke test to verify that the `text2sql` package imports successfully.
