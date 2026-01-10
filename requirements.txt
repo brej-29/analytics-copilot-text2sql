@@ -1,0 +1,21 @@
+# Core libraries for Analytics Copilot (Text-to-SQL) – Mistral-7B QLoRA
+
+# --- Runtime dependencies ---
+datasets>=2.18.0
+transformers>=4.38.0
+accelerate>=0.27.0
+peft>=0.10.0
+torch>=2.1.0
+sentencepiece>=0.1.99
+streamlit>=1.31.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pandas>=2.1.0
+numpy>=1.26.0
+unsloth
+trl>=0.9.0
+bitsandbytes
+
+# --- Tooling / testing ---
+pytest>=8.0.0
+huggingface-hub>=0.36.0
