@@ -35,6 +35,72 @@
 
 ---
 
+## Repo Structure
+
+Current high-level layout:
+
+```text
+.
+├── app/                        # Streamlit UI (remote inference via HF InferenceClient)
+│   └── streamlit_app.py
+├── docs/                       # Documentation, design notes, evaluation reports
+│   ├── dataset.md
+│   ├── training.md
+│   ├── evaluation.md
+│   └── external_validation.md
+├── notebooks/                  # Jupyter/Colab notebooks for experimentation
+├── scripts/                    # CLI scripts (dataset, training, evaluation, utilities)
+│   ├── build_dataset.py
+│   ├── check_syntax.py
+│   ├── smoke_load_dataset.py
+│   ├── smoke_infer_endpoint.py
+│   ├── train_qlora.py
+│   ├── evaluate_internal.py
+│   ├── evaluate_spider_external.py
+│   └── publish_to_hub.py
+├── src/
+│   └── text2sql/               # Core Python package
+│       ├── __init__.py
+│       ├── data_prep.py
+│       ├── infer.py
+│       ├── training/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   └── formatting.py
+│       └── eval/
+│           ├── __init__.py
+│           ├── normalize.py
+│           ├── schema.py
+│           ├── metrics.py
+│           └── spider.py
+├── tests/
+│   ├── fixtures/
+│   │   ├── sql_create_context_sample.jsonl
+│   │   ├── eval_internal_sample.jsonl
+│   │   ├── spider_sample.jsonl
+│   │   └── spider_schema_sample.jsonl
+│   ├── test_repo_smoke.py
+│   ├── test_build_dataset_offline.py
+│   ├── test_data_prep.py
+│   ├── test_eval_cli_args.py
+│   ├── test_infer_quantization.py
+│   ├── test_prompt_formatting.py
+│   ├── test_normalize_sql.py
+│   ├── test_schema_adherence.py
+│   └── test_metrics_aggregate.py
+├── .env.example                # Example environment file
+├── .gitignore
+├── context.md                  # Persistent project context & decisions
+├── LICENSE
+├── README.md
+└── requirements.txt
+```
+
+As the project progresses, this structure will be refined and additional modules,
+scripts, and documentation will be added.
+
+---
+
 # Analytics Copilot (Text-to-SQL) – Mistral-7B QLoRA
 
 ## Overview
@@ -451,66 +517,12 @@ When deploying to Streamlit Cloud:
 
 ---
 
-## Repo Structure
+## **License**
+This project is licensed under the MIT License. See the LICENSE file for details.
 
-Current high-level layout:
+---
 
-```text
-.
-├── app/                        # Streamlit UI (remote inference via HF InferenceClient)
-│   └── streamlit_app.py
-├── docs/                       # Documentation, design notes, evaluation reports
-│   ├── dataset.md
-│   ├── training.md
-│   ├── evaluation.md
-│   └── external_validation.md
-├── notebooks/                  # Jupyter/Colab notebooks for experimentation
-├── scripts/                    # CLI scripts (dataset, training, evaluation, utilities)
-│   ├── build_dataset.py
-│   ├── check_syntax.py
-│   ├── smoke_load_dataset.py
-│   ├── smoke_infer_endpoint.py
-│   ├── train_qlora.py
-│   ├── evaluate_internal.py
-│   ├── evaluate_spider_external.py
-│   └── publish_to_hub.py
-├── src/
-│   └── text2sql/               # Core Python package
-│       ├── __init__.py
-│       ├── data_prep.py
-│       ├── infer.py
-│       ├── training/
-│       │   ├── __init__.py
-│       │   ├── config.py
-│       │   └── formatting.py
-│       └── eval/
-│           ├── __init__.py
-│           ├── normalize.py
-│           ├── schema.py
-│           ├── metrics.py
-│           └── spider.py
-├── tests/
-│   ├── fixtures/
-│   │   ├── sql_create_context_sample.jsonl
-│   │   ├── eval_internal_sample.jsonl
-│   │   ├── spider_sample.jsonl
-│   │   └── spider_schema_sample.jsonl
-│   ├── test_repo_smoke.py
-│   ├── test_build_dataset_offline.py
-│   ├── test_data_prep.py
-│   ├── test_eval_cli_args.py
-│   ├── test_infer_quantization.py
-│   ├── test_prompt_formatting.py
-│   ├── test_normalize_sql.py
-│   ├── test_schema_adherence.py
-│   └── test_metrics_aggregate.py
-├── .env.example                # Example environment file
-├── .gitignore
-├── context.md                  # Persistent project context & decisions
-├── LICENSE
-├── README.md
-└── requirements.txt
-```
-
-As the project progresses, this structure will be refined and additional modules,
-scripts, and documentation will be added.
+## **Contact**
+- Live App: 
+- For issues/feature requests: open a GitHub Issue in this repository.
+- For questions or feedback, connect with me on [LinkedIn](https://www.linkedin.com/in/brejesh-balakrishnan-7855051b9/)
