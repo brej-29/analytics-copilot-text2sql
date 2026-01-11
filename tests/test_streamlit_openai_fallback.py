@@ -31,7 +31,13 @@ class _DummyOpenAIResponses:
     def __init__(self, text: str) -> None:
         self._text = text
 
-    def create(self, model: str, input: str, max_output_tokens: int) -> _DummyOpenAIResponse:  # noqa: ARG002
+    def create(
+        self,
+        model: str,
+        input: str,
+        max_output_tokens: int,
+        **_: Any,
+    ) -> _DummyOpenAIResponse:  # noqa: ARG002
         return _DummyOpenAIResponse(self._text)
 
 
