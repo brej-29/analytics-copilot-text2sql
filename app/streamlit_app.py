@@ -276,7 +276,6 @@ def _call_model(
         "prompt": full_prompt,
         "max_new_tokens": max_tokens,
         "temperature": temperature,
-        "timeout": timeout_s,
     }
     if use_endpoint and adapter_id:
         generation_kwargs["adapter_id"] = adapter_id
@@ -357,9 +356,9 @@ def main() -> None:
         with col1:
             temperature = st.slider(
                 "Temperature",
-                min_value=0.0,
+                min_value=0.001,
                 max_value=1.0,
-                value=0.0,
+                value=0.01,
                 step=0.05,
                 help="Sampling temperature for the model (0.0 = greedy).",
             )
