@@ -258,6 +258,9 @@ For details, see [`docs/external_validation.md`](./docs/external_validation.md).
 For a quick local quality check before pushing changes, you can run:
 
 ```bash
+# 0) Verify runtime configuration for HF / OpenAI providers
+python scripts/check_runtime_config.py
+
 # 1) Syntax validation across src/, scripts/, and app/
 python scripts/check_syntax.py
 
@@ -268,7 +271,9 @@ ruff check .
 pytest -q
 ```
 
-These commands are also wired into the CI workflow (`.github/workflows/ci.yml`).
+These commands are also wired into the CI workflow (`.github/workflows/ci.yml`),
+with an additional `python -m compileall .` safety gate to catch syntax errors
+early.
 
 ---
 
@@ -397,10 +402,15 @@ When deploying to Streamlit Cloud:
 - Add `HF_TOKEN`, `HF_ENDPOINT_URL`, and `HF_ADAPTER_ID` (or `HF_MODEL_ID` /
   `HF_PROVIDER` for the router fallback) to the app's **Secrets** in the
   Streamlit Cloud UI.
+- Optionally configure `OPENAI_API_KEY` (and `OPENAI_FALLBACK_MODEL`, which
+  defaults to `gpt-5-nano`) to enable the OpenAI fallback path when HF
+  inference fails.
 - The app will automatically construct an `InferenceClient` from those values
   and use the dedicated endpoint when `HF_ENDPOINT_URL` is set.
 - No GPU is required on the Streamlit side; all heavy lifting is done by the
   remote Hugging Face Inference backend.
+- For a step-by-step deployment walkthrough (including screenshots and
+  details on secrets), see [`docs/deploy_streamlit_cloud.md`](./docs/deploy_streamlit_cloud.md).
 
 ---
 

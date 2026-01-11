@@ -27,6 +27,9 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install ruff
 
+      - name: Compile all Python files (syntax gate)
+        run: python -m compileall .
+
       - name: Syntax check (compileall)
         run: python scripts/check_syntax.py
 
