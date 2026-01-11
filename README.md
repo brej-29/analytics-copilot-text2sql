@@ -6,13 +6,13 @@
 <br>
 
 <div align="center">
-  <img alt="CI" src="https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg">
+  <img alt="CI" src="https://github.com/brej-29/analytics-copilot-text2sql/actions/workflows/ci.yml/badge.svg">
   <img alt="Language" src="https://img.shields.io/badge/Language-Python-blue">
   <img alt="Model" src="https://img.shields.io/badge/Model-Mistral--7B%20QLoRA-blueviolet">
   <img alt="Serving" src="https://img.shields.io/badge/Serving-HuggingFace%20Inference-yellow">
   <img alt="UI" src="https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white">
   </br>
-  <a href="https://github.com/OWNER/REPO" target="_blank">
+  <a href="https://github.com/brej-29/analytics-copilot-text2sql" target="_blank">
     <button style="background-color: #0f766e; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
         REPO LINK
     </button>
