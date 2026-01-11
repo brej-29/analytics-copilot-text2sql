@@ -523,6 +523,6 @@ This project is licensed under the MIT License. See the LICENSE file for details
 ---
 
 ## **Contact**
-- Live App: 
+- Live App: https://www.analytics-copilot-text2sql.streamlit.app/
 - For issues/feature requests: open a GitHub Issue in this repository.
 - For questions or feedback, connect with me on [LinkedIn](https://www.linkedin.com/in/brejesh-balakrishnan-7855051b9/)
