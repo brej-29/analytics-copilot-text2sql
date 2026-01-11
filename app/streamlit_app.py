@@ -236,7 +236,12 @@ def _openai_response_text(resp: Any) -> str:
 
     1) Prefer the convenience `output_text` attribute when present and non-empty.
     2) Otherwise, iterate over `resp.output` and aggregate any text content blocks.
+
+    The Responses API typically exposes text as:
+        resp.output[0].content[0].text.value
+    but this helper is defensive and also supports dict-like structures.
     """
+    # 1) Convenience attribute, when present.
     try:
         value = getattr(resp, "output_text", None)
     except Exception:  # noqa: BLE001
@@ -245,8 +250,7 @@ def _openai_response_text(resp: Any) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
 
-    chunks: list[str] = []
-
+    # 2) Walk the output structure.
     try:
         output = getattr(resp, "output", None)
     except Exception:  # noqa: BLE001
@@ -255,30 +259,54 @@ def _openai_response_text(resp: Any) -> str:
     if not output:
         return ""
 
+    chunks: list[str] = []
+
     try:
         for item in output:
+            # Handle both object-style and dict-style access to content.
+            content_list: Any
             if isinstance(item, dict):
                 content_list = item.get("content")
             else:
-                content_list = getattr(item, "content", None)
+                try:
+                    content_list = getattr(item, "content", None)
+                except Exception:  # noqa: BLE001
+                    content_list = None
 
             if not content_list:
                 continue
 
             for content in content_list:
-                text_val: Optional[str] = None
+                # Retrieve the "text" field from the content object or dict.
+                text_obj: Any = None
                 if isinstance(content, dict):
-                    text_val = content.get("text") or content.get("output_text")
+                    text_obj = content.get("text")
                 else:
                     try:
-                        text_val = getattr(content, "text", None)
+                        text_obj = getattr(content, "text", None)
                     except Exception:  # noqa: BLE001
-                        text_val = None
-                    if text_val is None:
-                        try:
-                            text_val = getattr(content, "output_text", None)
-                        except Exception:  # noqa: BLE001
-                            text_val = None
+                        text_obj = None
+
+                if text_obj is None:
+                    continue
+
+                # Unwrap the actual string value, handling nested objects/dicts.
+                text_val: Optional[str] = None
+                if isinstance(text_obj, str):
+                    text_val = text_obj
+                else:
+                    # Object-style: content.text.value
+                    try:
+                        inner_val = getattr(text_obj, "value", None)
+                    except Exception:  # noqa: BLE001
+                        inner_val = None
+                    if isinstance(inner_val, str):
+                        text_val = inner_val
+                    elif isinstance(text_obj, dict):
+                        # Dict-style: {"text": {"value": "..."}} or similar.
+                        inner_val = text_obj.get("value")
+                        if isinstance(inner_val, str):
+                            text_val = inner_val
 
                 if isinstance(text_val, str) and text_val:
                     chunks.append(text_val)
