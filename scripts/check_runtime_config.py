@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import sys
+from typing import Any, Mapping, Tuple
+
 """
 Runtime configuration checker for the Streamlit app.
 
@@ -26,11 +31,6 @@ Exit codes:
 The masking format for tokens/keys is similar to: `hf_****1234`
 (i.e. keep a short prefix and the last 4 characters).
 """
-
-import os
-from pathlib import Path
-import sys
-from typing import Any, Mapping, Tuple
 
 try:
     import tomllib  # Python 3.11+
