@@ -31,13 +31,8 @@ class _DummyOpenAIResponses:
     def __init__(self, text: str) -> None:
         self._text = text
 
-    def create(
-        self,
-        model: str,
-        input: str,
-        max_output_tokens: int,
-        **_: Any,
-    ) -> _DummyOpenAIResponse:  # noqa: ARG002
+    def create(self, *args: Any, **kwargs: Any) -> _DummyOpenAIResponse:  # noqa: ARG002
+        """Mimic OpenAI Responses.create without enforcing a specific signature."""
         return _DummyOpenAIResponse(self._text)
 
 
@@ -130,13 +125,8 @@ def test_openai_fallback_uses_raw_text_when_extractor_returns_empty(
         def __init__(self, text: str) -> None:
             self._text = text
 
-        def create(
-            self,
-            model: str,
-            input: str,
-            max_output_tokens: int,
-            **_: Any,
-        ) -> _DummyOpenAIResponseRaw:  # noqa: ARG002
+        def create(self, *args: Any, **kwargs: Any) -> _DummyOpenAIResponseRaw:  # noqa: ARG002
+            """Mimic OpenAI Responses.create without enforcing a specific signaturew:  # noqa: ARG002
             return _DummyOpenAIResponseRaw(self._text)
 
     class _DummyOpenAIClientRaw:
