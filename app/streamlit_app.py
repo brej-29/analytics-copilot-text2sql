@@ -48,6 +48,7 @@ from typing import Any, Mapping, NamedTuple, Optional, Tuple
 
 import streamlit as st
 from huggingface_hub import InferenceClient  # type: ignore[import]
+from openai import OpenAI  # type: ignore[import]
 
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,43 @@ def _resolve_hf_config(
     )
 
 
+def _get_openai_settings() -> Tuple[str, str]:
+    """
+    Resolve OpenAI fallback settings from Streamlit secrets and environment variables.
+
+    Secrets take precedence over environment variables. The model name falls back
+    to "gpt-5-nano" when not configured explicitly.
+    """
+    try:
+        secrets: Mapping[str, Any] = st.secrets  # type: ignore[assignment]
+    except Exception:  # noqa: BLE001
+        secrets = {}
+
+    def _get_from_mapping(mapping: Mapping[str, Any], key: str) -> str:
+        try:
+            value = mapping.get(key)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            value = None
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    api_key = _get_from_mapping(secrets, "OPENAI_API_KEY") or os.environ.get(
+        "OPENAI_API_KEY",
+        "",
+    ).strip()
+
+    model_name = _get_from_mapping(secrets, "OPENAI_FALLBACK_MODEL") or os.environ.get(
+        "OPENAI_FALLBACK_MODEL",
+        "",
+    ).strip()
+
+    if not model_name:
+        model_name = "gpt-5-nano"
+
+    return api_key, model_name
+
+
 @st.cache_resource(show_spinner=False)
 def _get_cached_client(
     hf_token: str,
@@ -160,6 +198,41 @@ def _get_cached_client(
         provider=provider,
         timeout=timeout_s,
     )
+
+
+def _call_openai_fallback(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+) -> str:
+    """
+    Call the OpenAI Responses API as a fallback when HF inference fails.
+
+    Uses the cheapest nano model (default: gpt-5-nano) and avoids passing
+    unsupported parameters such as temperature or top_p.
+    """
+    api_key, model_name = _get_openai_settings()
+    if not api_key:
+        raise RuntimeError("OpenAI fallback not configured")
+
+    client = OpenAI(api_key=api_key)
+    full_input = f"{system_prompt}\n\n{user_prompt}"
+    response = client.responses.create(
+        model=model_name,
+        input=full_input,
+        max_output_tokens=max_tokens,
+    )
+
+    try:
+        text = response.output_text  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "OpenAI fallback response did not contain text output.",
+            exc_info=True,
+        )
+        raise RuntimeError("OpenAI fallback did not return text output") from exc
+
+    return (text or "").strip()
 
 
 def _build_prompt(schema: str, question: str) -> Tuple[str, str]:
@@ -282,15 +355,26 @@ def _call_model(
 
     try:
         response = client.text_generation(**generation_kwargs)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Error while calling Hugging Face Inference API.", exc_info=True)
-        st.error(
-            "The Hugging Face Inference endpoint did not respond successfully. "
-            "This can happen if the endpoint is cold, overloaded, or misconfigured. "
-            "Please try again, or check your HF endpoint / model settings."
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Error while calling Hugging Face Inference API. "
+            "Attempting OpenAI fallback if configured.",
         )
-        st.caption(f"Details: {exc}")
-        return None, user_prompt
+        try:
+            sql_text = _call_openai_fallback(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("OpenAI fallback inference failed.")
+            st.error(
+                "The service is temporarily unavailable. Please try again in a moment."
+            )
+            return None, user_prompt
+
+        st.caption("Using backup inference provider")
+        return sql_text, user_prompt
 
     # InferenceClient.text_generation may return a string, a dict, or a list.
     try:
