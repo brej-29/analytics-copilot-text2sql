@@ -1,3 +1,106 @@
+<div align="center">
+  <h1>Analytics Copilot (Text-to-SQL) – Mistral-7B QLoRA</h1>
+  <p><i>End-to-end scaffolding for a Text-to-SQL copilot &mdash; Mistral-7B QLoRA fine-tuning &rarr; dataset + training pipeline &rarr; evaluation &rarr; remote inference via Hugging Face Inference &rarr; Streamlit UI ready for Streamlit Community Cloud</i></p>
+</div>
+
+<br>
+
+<div align="center">
+  <img alt="CI" src="https://github.com/brej-29/analytics-copilot-text2sql/actions/workflows/ci.yml/badge.svg">
+  <img alt="Language" src="https://img.shields.io/badge/Language-Python-blue">
+  <img alt="Model" src="https://img.shields.io/badge/Model-Mistral--7B%20QLoRA-blueviolet">
+  <img alt="Serving" src="https://img.shields.io/badge/Serving-HuggingFace%20Inference-yellow">
+  <img alt="UI" src="https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white">
+  </br>
+  <a href="https://github.com/brej-29/analytics-copilot-text2sql" target="_blank">
+    <button style="background-color: #0f766e; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+        REPO LINK
+    </button>
+  </a>
+</div>
+
+<div align="center">
+  <br>
+  <b>Built with:</b>
+  <br><br>
+  <code>Python</code> |
+  <code>PyTorch</code> |
+  <code>Transformers</code> |
+  <code>PEFT / QLoRA</code> |
+  <code>Hugging Face Datasets</code> |
+  <code>Hugging Face Hub</code> |
+  <code>Streamlit</code> |
+  <code>pytest</code>
+</div>
+
+---
+
+## Repo Structure
+
+Current high-level layout:
+
+```text
+.
+├── app/                        # Streamlit UI (remote inference via HF InferenceClient)
+│   └── streamlit_app.py
+├── docs/                       # Documentation, design notes, evaluation reports
+│   ├── dataset.md
+│   ├── training.md
+│   ├── evaluation.md
+│   └── external_validation.md
+├── notebooks/                  # Jupyter/Colab notebooks for experimentation
+├── scripts/                    # CLI scripts (dataset, training, evaluation, utilities)
+│   ├── build_dataset.py
+│   ├── check_syntax.py
+│   ├── smoke_load_dataset.py
+│   ├── smoke_infer_endpoint.py
+│   ├── train_qlora.py
+│   ├── evaluate_internal.py
+│   ├── evaluate_spider_external.py
+│   └── publish_to_hub.py
+├── src/
+│   └── text2sql/               # Core Python package
+│       ├── __init__.py
+│       ├── data_prep.py
+│       ├── infer.py
+│       ├── training/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   └── formatting.py
+│       └── eval/
+│           ├── __init__.py
+│           ├── normalize.py
+│           ├── schema.py
+│           ├── metrics.py
+│           └── spider.py
+├── tests/
+│   ├── fixtures/
+│   │   ├── sql_create_context_sample.jsonl
+│   │   ├── eval_internal_sample.jsonl
+│   │   ├── spider_sample.jsonl
+│   │   └── spider_schema_sample.jsonl
+│   ├── test_repo_smoke.py
+│   ├── test_build_dataset_offline.py
+│   ├── test_data_prep.py
+│   ├── test_eval_cli_args.py
+│   ├── test_infer_quantization.py
+│   ├── test_prompt_formatting.py
+│   ├── test_normalize_sql.py
+│   ├── test_schema_adherence.py
+│   └── test_metrics_aggregate.py
+├── .env.example                # Example environment file
+├── .gitignore
+├── context.md                  # Persistent project context & decisions
+├── LICENSE
+├── README.md
+└── requirements.txt
+```
+
+As the project progresses, this structure will be refined and additional modules,
+scripts, and documentation will be added.
+
+---
+
 # Analytics Copilot (Text-to-SQL) – Mistral-7B QLoRA
 
 ## Overview
@@ -258,6 +361,9 @@ For details, see [`docs/external_validation.md`](./docs/external_validation.md).
 For a quick local quality check before pushing changes, you can run:
 
 ```bash
+# 0) Verify runtime configuration for HF / OpenAI providers
+python scripts/check_runtime_config.py
+
 # 1) Syntax validation across src/, scripts/, and app/
 python scripts/check_syntax.py
 
@@ -268,7 +374,9 @@ ruff check .
 pytest -q
 ```
 
-These commands are also wired into the CI workflow (`.github/workflows/ci.yml`).
+These commands are also wired into the CI workflow (`.github/workflows/ci.yml`),
+with an additional `python -m compileall .` safety gate to catch syntax errors
+early.
 
 ---
 
@@ -397,73 +505,24 @@ When deploying to Streamlit Cloud:
 - Add `HF_TOKEN`, `HF_ENDPOINT_URL`, and `HF_ADAPTER_ID` (or `HF_MODEL_ID` /
   `HF_PROVIDER` for the router fallback) to the app's **Secrets** in the
   Streamlit Cloud UI.
+- Optionally configure `OPENAI_API_KEY` (and `OPENAI_FALLBACK_MODEL`, which
+  defaults to `gpt-5-nano`) to enable the OpenAI fallback path when HF
+  inference fails.
 - The app will automatically construct an `InferenceClient` from those values
   and use the dedicated endpoint when `HF_ENDPOINT_URL` is set.
 - No GPU is required on the Streamlit side; all heavy lifting is done by the
   remote Hugging Face Inference backend.
+- For a step-by-step deployment walkthrough (including screenshots and
+  details on secrets), see [`docs/deploy_streamlit_cloud.md`](./docs/deploy_streamlit_cloud.md).
 
 ---
 
-## Repo Structure
+## **License**
+This project is licensed under the MIT License. See the LICENSE file for details.
 
-Current high-level layout:
+---
 
-```text
-.
-├── app/                        # Streamlit UI (remote inference via HF InferenceClient)
-│   └── streamlit_app.py
-├── docs/                       # Documentation, design notes, evaluation reports
-│   ├── dataset.md
-│   ├── training.md
-│   ├── evaluation.md
-│   └── external_validation.md
-├── notebooks/                  # Jupyter/Colab notebooks for experimentation
-├── scripts/                    # CLI scripts (dataset, training, evaluation, utilities)
-│   ├── build_dataset.py
-│   ├── check_syntax.py
-│   ├── smoke_load_dataset.py
-│   ├── smoke_infer_endpoint.py
-│   ├── train_qlora.py
-│   ├── evaluate_internal.py
-│   ├── evaluate_spider_external.py
-│   └── publish_to_hub.py
-├── src/
-│   └── text2sql/               # Core Python package
-│       ├── __init__.py
-│       ├── data_prep.py
-│       ├── infer.py
-│       ├── training/
-│       │   ├── __init__.py
-│       │   ├── config.py
-│       │   └── formatting.py
-│       └── eval/
-│           ├── __init__.py
-│           ├── normalize.py
-│           ├── schema.py
-│           ├── metrics.py
-│           └── spider.py
-├── tests/
-│   ├── fixtures/
-│   │   ├── sql_create_context_sample.jsonl
-│   │   ├── eval_internal_sample.jsonl
-│   │   ├── spider_sample.jsonl
-│   │   └── spider_schema_sample.jsonl
-│   ├── test_repo_smoke.py
-│   ├── test_build_dataset_offline.py
-│   ├── test_data_prep.py
-│   ├── test_eval_cli_args.py
-│   ├── test_infer_quantization.py
-│   ├── test_prompt_formatting.py
-│   ├── test_normalize_sql.py
-│   ├── test_schema_adherence.py
-│   └── test_metrics_aggregate.py
-├── .env.example                # Example environment file
-├── .gitignore
-├── context.md                  # Persistent project context & decisions
-├── LICENSE
-├── README.md
-└── requirements.txt
-```
-
-As the project progresses, this structure will be refined and additional modules,
-scripts, and documentation will be added.
+## **Contact**
+- Live App: 
+- For issues/feature requests: open a GitHub Issue in this repository.
+- For questions or feedback, connect with me on [LinkedIn](https://www.linkedin.com/in/brejesh-balakrishnan-7855051b9/)

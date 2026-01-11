@@ -1,0 +1,7 @@
+# Ruff configuration
+# See: https://docs.astral.sh/ruff/configuration/
+
+# Keep all default excludes, but also ignore the Jupyter notebooks folder.
+extend-exclude = [
+  "notebooks",
+]

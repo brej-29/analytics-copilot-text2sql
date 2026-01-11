@@ -45,6 +45,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Mapping, NamedTuple, Optional, Tuple
 
 import streamlit as st
@@ -479,13 +480,43 @@ def _extract_sql_from_text(raw_text: str) -> str:
     return raw_text.strip()
 
 
+def _update_last_request_diagnostics(
+    provider_label: str,
+    endpoint_paused: bool,
+    duration_ms: float,
+    max_tokens: int,
+) -> None:
+    """
+    Store lightweight diagnostics about the last inference request.
+
+    Diagnostics are kept in Streamlit's session_state (when available) so that
+    the UI can render them in a dedicated Diagnostics panel without exposing
+    stack traces or raw exception objects.
+    """
+    try:
+        state = st.session_state  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001
+        return
+
+    try:
+        state["diagnostics_last_request"] = {
+            "provider": provider_label,
+            "endpoint_paused": bool(endpoint_paused),
+            "duration_ms": float(duration_ms),
+            "max_tokens": int(max_tokens),
+        }
+    except Exception:  # noqa: BLE001
+        # Diagnostics should never break the main app flow.
+        logger.debug("Failed to update diagnostics in session_state.", exc_info=True)
+
+
 def _call_model(
     client: InferenceClient,
     schema: str,
     question: str,
     temperature: float,
     max_tokens: int,
-    timeout_s: int = 45,
+    timeout_s: int = 45,  # noqa: ARG001
     adapter_id: Optional[str] = None,
     use_endpoint: bool = False,
 ) -> Tuple[Optional[str], str]:
@@ -510,20 +541,29 @@ def _call_model(
     if use_endpoint and adapter_id:
         generation_kwargs["adapter_id"] = adapter_id
 
+    provider_label = "HF"
+    endpoint_paused = False
+    start = time.perf_counter()
+
     try:
         response = client.text_generation(**generation_kwargs)
     except Exception as exc:  # noqa: BLE001
         message = str(exc) if exc is not None else ""
         lower_message = message.lower()
         if "endpoint is paused" in lower_message:
+            endpoint_paused = True
             logger.warning(
                 "Hugging Face Inference endpoint is paused; using OpenAI fallback.",
             )
+            # See HF Inference Endpoints docs on pausing/resuming endpoints:
+            # https://huggingface.co/docs/inference-endpoints/en/guides/pause_endpoint
         else:
             logger.exception(
                 "Error while calling Hugging Face Inference API. "
                 "Attempting OpenAI fallback if configured.",
             )
+
+        provider_label = "OpenAI fallback"
         try:
             raw_text = _call_openai_fallback(
                 system_prompt=system_prompt,
@@ -533,6 +573,13 @@ def _call_model(
             logger.exception("OpenAI fallback inference failed.")
             st.error(
                 "The service is temporarily unavailable. Please try again in a moment."
+            )
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            _update_last_request_diagnostics(
+                provider_label=provider_label,
+                endpoint_paused=endpoint_paused,
+                duration_ms=duration_ms,
+                max_tokens=max_tokens,
             )
             return None, user_prompt
 
@@ -546,6 +593,13 @@ def _call_model(
                 sql_text = raw_text.strip()
 
         st.caption("Using backup inference provider")
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        _update_last_request_diagnostics(
+            provider_label=provider_label,
+            endpoint_paused=endpoint_paused,
+            duration_ms=duration_ms,
+            max_tokens=max_tokens,
+        )
         return sql_text, user_prompt
 
     # InferenceClient.text_generation may return a string, a dict, or a list.
@@ -571,10 +625,65 @@ def _call_model(
             "Inference API. Please check your endpoint and model configuration."
         )
         st.caption(f"Details: {exc}")
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        _update_last_request_diagnostics(
+            provider_label=provider_label,
+            endpoint_paused=endpoint_paused,
+            duration_ms=duration_ms,
+            max_tokens=max_tokens,
+        )
         return None, user_prompt
 
     sql_text = (text or "").strip()
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    _update_last_request_diagnostics(
+        provider_label=provider_label,
+        endpoint_paused=endpoint_paused,
+        duration_ms=duration_ms,
+        max_tokens=max_tokens,
+    )
     return sql_text, user_prompt
+
+
+def _render_diagnostics_sidebar() -> None:
+    """Render a lightweight diagnostics panel in the sidebar."""
+    try:
+        state = st.session_state  # type: ignore[attr-defined]
+        diagnostics = state.get("diagnostics_last_request")  # type: ignore[assignment]
+    except Exception:  # noqa: BLE001
+        diagnostics = None
+
+    with st.sidebar.expander("Diagnostics", expanded=False):
+        if not isinstance(diagnostics, dict):
+            st.caption("Run a request to see diagnostics for the last call.")
+            return
+
+        provider_label = diagnostics.get("provider") or "–"
+        duration_ms = diagnostics.get("duration_ms")
+        max_tokens = diagnostics.get("max_tokens")
+        endpoint_paused = bool(diagnostics.get("endpoint_paused"))
+
+        st.markdown(f"**Active provider (last request):** {provider_label}")
+
+        if duration_ms is not None:
+            try:
+                duration_val = float(duration_ms)
+            except Exception:  # noqa: BLE001
+                duration_val = None
+            if duration_val is not None:
+                st.markdown(f"**Request duration:** {duration_val:.0f} ms")
+
+        if max_tokens is not None:
+            try:
+                max_tokens_val = int(max_tokens)
+            except Exception:  # noqa: BLE001
+                max_tokens_val = None
+            if max_tokens_val is not None:
+                st.markdown(f"**Max new tokens parameter:** {max_tokens_val}")
+
+        if endpoint_paused:
+            # Friendly hint only; do not surface raw exception text or stack traces.
+            st.info("HF endpoint is paused; resume it in HF Endpoints → Overview.")
 
 
 def main() -> None:
@@ -633,9 +742,11 @@ def main() -> None:
     if generate_clicked:
         if not schema.strip():
             st.warning("Please provide a database schema (DDL) before generating SQL.")
+            _render_diagnostics_sidebar()
             return
         if not question.strip():
             st.warning("Please provide a natural-language question.")
+            _render_diagnostics_sidebar()
             return
 
         with st.spinner("Calling Hugging Face Inference API..."):
@@ -662,6 +773,8 @@ def main() -> None:
                 "No SQL was generated due to an error when calling the remote "
                 "inference endpoint. Please review the error message above."
             )
+
+    _render_diagnostics_sidebar()
 
 
 if __name__ == "__main__":
