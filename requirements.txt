@@ -22,3 +22,6 @@ huggingface-hub>=0.36.0
 
 # --- Evaluation helpers ---
 sqlglot>=28.5.0
+
+# --- Inference fallbacks ---
+openai>=2.15.0
