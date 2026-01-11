@@ -184,6 +184,19 @@ python scripts/evaluate_internal.py \
   --out_dir reports/
 ```
 
+Quick smoke test (small subset, CPU-friendly):
+
+```bash
+python scripts/evaluate_internal.py --smoke \
+  --val_path data/processed/val.jsonl \
+  --out_dir reports/
+```
+
+- On GPU machines, `--smoke` runs a tiny subset through the full pipeline.
+- On CPU-only environments, `--smoke` automatically falls back to `--mock` so
+  that no heavy model loading is attempted while still exercising the metrics
+  and reporting stack.
+
 Outputs:
 
 - `reports/eval_internal.json` – metrics, config, and sample predictions.
@@ -257,18 +270,137 @@ pytest -q
 
 These commands are also wired into the CI workflow (`.github/workflows/ci.yml`).
 
-## Demo (placeholder)
+---
 
-> The Streamlit UI will be documented here when implemented.
+## Publishing to Hugging Face Hub
 
-Planned content for this section:
+After training, you can publish the QLoRA adapter artifacts to the Hugging Face Hub
+for reuse and remote inference.
 
-- How to start the Streamlit app (under `app/`).
-- Sample configuration for connecting to a demo database or local SQLite DB.
-- Usage examples:
-  - Asking natural-language questions.
-  - Viewing generated SQL and query results.
-  - Editing and re-running SQL.
+1. Authenticate with Hugging Face:
+
+   ```bash
+   huggingface-cli login --token YOUR_HF_TOKEN
+   ```
+
+   or set an environment variable:
+
+   ```bash
+   export HF_TOKEN=YOUR_HF_TOKEN
+   ```
+
+2. Run the publish script, pointing it at your adapter directory and desired repo id:
+
+   ```bash
+   python scripts/publish_to_hub.py \
+     --repo_id your-username/analytics-copilot-text2sql-mistral7b-qlora \
+     --adapter_dir outputs/adapters \
+     --include_metrics reports/eval_internal.json
+   ```
+
+The script will:
+
+- Validate that a Hugging Face token is available.
+- Create the model repo if it does not exist (public by default, or `--private`).
+- Ensure a README.md model card is written into the adapter directory (with metrics
+  if provided).
+- Upload the entire adapter folder to the Hub using `huggingface_hub.HfApi`.
+
+You can re-run the script safely; it will perform another commit with the specified
+`--commit_message`.
+
+---
+
+
+
+## Demo – Streamlit UI (Remote Inference)
+
+The repository includes a lightweight Streamlit UI that talks to a **remote**
+model via Hugging Face Inference (no local GPU required). The app lives at
+`app/streamlit_app.py` and intentionally does **not** import `torch` or
+`transformers`.
+
+### Remote Inference Note
+
+- The Streamlit app is **UI-only**; it never loads model weights locally.
+- All text-to-SQL generation is performed remotely using
+  `huggingface_hub.InferenceClient`.
+- For small models you may be able to use Hugging Face serverless Inference,
+  but large models like Mistral-7B often require **Inference Endpoints** or a
+  dedicated provider.
+- If serverless calls fail or time out, consider deploying a dedicated
+  Inference Endpoint or self-hosted TGI/serving stack and pointing the app at
+  its URL via `HF_ENDPOINT_URL` / `HF_INFERENCE_BASE_URL`.
+
+> **Adapter repos and the HF router:** If you point the app at a pure LoRA
+> adapter repository (e.g. `BrejBala/analytics-copilot-mistral7b-text2sql-adapter`)
+> using `HF_MODEL_ID` without an `HF_ENDPOINT_URL`, the request goes through
+> the Hugging Face **router** and most providers will respond with
+> `model_not_supported`. For adapter-based inference, use a dedicated
+> Inference Endpoint and configure `HF_ENDPOINT_URL` + `HF_ADAPTER_ID` instead
+> of trying to call the adapter repo directly via the router.
+
+### Running the app locally
+
+1. Configure Streamlit secrets by creating `.streamlit/secrets.toml` from the
+   example:
+
+   ```bash
+   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+   ```
+
+   Then edit `.streamlit/secrets.toml` (not tracked by git) and fill in either:
+
+   **Preferred: dedicated endpoint + adapter**
+
+   ```toml
+   HF_TOKEN        = "hf_your_access_token_here"
+
+   # Dedicated Inference Endpoint / TGI URL
+   HF_ENDPOINT_URL = "https://o0mmkmv1itfrikie.us-east4.gcp.endpoints.huggingface.cloud"
+
+   # Adapter identifier configured in your endpoint's LORA_ADAPTERS
+   HF_ADAPTER_ID   = "BrejBala/analytics-copilot-mistral7b-text2sql-adapter"
+   ```
+
+   **Fallback: provider/router-based merged model (no adapters)**
+
+   ```toml
+   HF_TOKEN    = "hf_your_access_token_here"
+   HF_MODEL_ID = "your-username/your-merged-text2sql-model"
+   HF_PROVIDER = "auto"  # optional provider hint
+   ```
+
+   `HF_INFERENCE_BASE_URL` is also supported as an alias for `HF_ENDPOINT_URL`.
+   The app will always prefer secrets over environment variables when both are
+   set.
+
+2. Start the Streamlit app:
+
+   ```bash
+   streamlit run app/streamlit_app.py
+   ```
+
+3. In the UI:
+
+   - Paste your database schema (DDL) into the **Schema** text area.
+   - Enter a natural-language question.
+   - Click **Generate SQL** to call the remote model.
+   - View the generated SQL in a code block (with a copy button).
+   - Optionally open the **Show prompt** expander to inspect the exact prompt
+     sent to the model (useful for debugging and prompt engineering).
+
+### Deploying on Streamlit Community Cloud
+
+When deploying to Streamlit Cloud:
+
+- Add `HF_TOKEN`, `HF_ENDPOINT_URL`, and `HF_ADAPTER_ID` (or `HF_MODEL_ID` /
+  `HF_PROVIDER` for the router fallback) to the app's **Secrets** in the
+  Streamlit Cloud UI.
+- The app will automatically construct an `InferenceClient` from those values
+  and use the dedicated endpoint when `HF_ENDPOINT_URL` is set.
+- No GPU is required on the Streamlit side; all heavy lifting is done by the
+  remote Hugging Face Inference backend.
 
 ---
 
@@ -278,19 +410,23 @@ Current high-level layout:
 
 ```text
 .
-├── app/                        # Streamlit app (to be implemented)
+├── app/                        # Streamlit UI (remote inference via HF InferenceClient)
+│   └── streamlit_app.py
 ├── docs/                       # Documentation, design notes, evaluation reports
 │   ├── dataset.md
 │   ├── training.md
 │   ├── evaluation.md
 │   └── external_validation.md
 ├── notebooks/                  # Jupyter/Colab notebooks for experimentation
-├── scripts/                    # CLI scripts (dataset, training, evaluation)
+├── scripts/                    # CLI scripts (dataset, training, evaluation, utilities)
 │   ├── build_dataset.py
+│   ├── check_syntax.py
 │   ├── smoke_load_dataset.py
+│   ├── smoke_infer_endpoint.py
 │   ├── train_qlora.py
 │   ├── evaluate_internal.py
-│   └── evaluate_spider_external.py
+│   ├── evaluate_spider_external.py
+│   └── publish_to_hub.py
 ├── src/
 │   └── text2sql/               # Core Python package
 │       ├── __init__.py
@@ -315,11 +451,12 @@ Current high-level layout:
 │   ├── test_repo_smoke.py
 │   ├── test_build_dataset_offline.py
 │   ├── test_data_prep.py
+│   ├── test_eval_cli_args.py
+│   ├── test_infer_quantization.py
 │   ├── test_prompt_formatting.py
 │   ├── test_normalize_sql.py
 │   ├── test_schema_adherence.py
-│   ├── test_metrics_aggregate.py
-│   └── test_prompt_building_spider.py
+│   └── test_metrics_aggregate.py
 ├── .env.example                # Example environment file
 ├── .gitignore
 ├── context.md                  # Persistent project context & decisions

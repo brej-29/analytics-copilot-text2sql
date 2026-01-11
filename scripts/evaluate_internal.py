@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EvalConfig:
+    """
+    Configuration snapshot for an internal evaluation run.
+
+    This is primarily used for logging and for embedding run metadata into the
+    JSON / Markdown reports so that results remain reproducible.
+    """
+
     val_path: str
     base_model: str
     adapter_dir: Optional[str]
@@ -42,6 +49,10 @@ class EvalConfig:
     mock: bool
     load_in_4bit: Optional[bool] = None
     dtype: str = "auto"
+    bnb_4bit_quant_type: str = "nf4"
+    bnb_4bit_compute_dtype: str = "float16"
+    bnb_4bit_use_double_quant: bool = True
+    smoke: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -122,11 +133,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--load_in_4bit",
         action="store_true",
-        default=None,
+        dest="load_in_4bit",
+        default=True,
         help=(
-            "If set, force loading the base model in 4-bit (bitsandbytes) for "
-            "faster and more memory-efficient inference. By default this is "
-            "enabled automatically when running on CUDA and disabled on CPU."
+            "Enable loading the base model in 4-bit (bitsandbytes) for faster "
+            "and more memory-efficient inference. By default this is enabled "
+            "automatically when running on CUDA and disabled on CPU."
         ),
     )
     parser.add_argument(
@@ -146,11 +158,57 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--bnb_4bit_quant_type",
+        type=str,
+        default="nf4",
+        help=(
+            "Quantization type for 4-bit weights (e.g. 'nf4', 'fp4'). "
+            "This is passed to transformers.BitsAndBytesConfig when "
+            "--load_in_4bit is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--bnb_4bit_compute_dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "float16", "bfloat16"],
+        help=(
+            "Compute dtype for 4-bit quantization. "
+            "'auto' chooses bfloat16 on CUDA GPUs with bf16 support, "
+            "otherwise float16."
+        ),
+    )
+    parser.add_argument(
+        "--bnb_4bit_use_double_quant",
+        action="store_true",
+        dest="bnb_4bit_use_double_quant",
+        default=True,
+        help=(
+            "Whether to use nested (double) quantization when loading in 4-bit. "
+            "Enabled by default for better memory efficiency."
+        ),
+    )
+    parser.add_argument(
+        "--no_bnb_4bit_use_double_quant",
+        action="store_false",
+        dest="bnb_4bit_use_double_quant",
+        help="Disable nested (double) quantization when using 4-bit weights.",
+    )
+    parser.add_argument(
         "--mock",
         action="store_true",
         help=(
             "Run in mock mode: skip model loading and use gold SQL as "
             "predictions to validate the metric pipeline."
+        ),
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help=(
+            "Run a lightweight smoke test over a small subset of validation "
+            "examples. On CPU-only environments this will automatically "
+            "fall back to --mock to skip GPU-only model loading."
         ),
     )
 
@@ -266,8 +324,12 @@ def _write_markdown_report(
     lines.append(f"- **top_p:** `{config.top_p}`")
     lines.append(f"- **max_new_tokens:** `{config.max_new_tokens}`")
     lines.append(f"- **mock:** `{config.mock}`")
+    lines.append(f"- **smoke:** `{config.smoke}`")
     lines.append(f"- **load_in_4bit:** `{config.load_in_4bit}`")
     lines.append(f"- **dtype:** `{config.dtype}`")
+    lines.append(f"- **bnb_4bit_quant_type:** `{config.bnb_4bit_quant_type}`")
+    lines.append(f"- **bnb_4bit_compute_dtype:** `{config.bnb_4bit_compute_dtype}`")
+    lines.append(f"- **bnb_4bit_use_double_quant:** `{config.bnb_4bit_use_double_quant}`")
     lines.append(f"- **n_evaluated_examples:** `{n_examples}`\n")
 
     lines.append("## Metrics\n")
@@ -294,6 +356,11 @@ def _write_markdown_report(
             "- No-values EM further replaces string and numeric literals with "
             "placeholders, focusing on query structure rather than concrete values."
         )
+    if config.smoke:
+        lines.append(
+            "- `--smoke` mode was enabled, so only a small subset of validation "
+            "examples was evaluated for a quick health check."
+        )
     lines.append("")
 
     lines.append("## Example Predictions\n")
@@ -319,14 +386,83 @@ def run_eval(args: argparse.Namespace) -> int:
     val_path = Path(args.val_path)
     records = _load_alpaca_jsonl(val_path)
 
+    original_total = len(records)
+
     if args.max_examples is not None and args.max_examples > 0:
         records = records[: args.max_examples]
 
+    if args.smoke:
+        # In smoke mode we intentionally evaluate only a tiny subset of the
+        # validation set to keep the run fast and cheap.
+        smoke_limit = min(5, len(records)) if records else 0
+        records = records[:smoke_limit]
+        logger.info(
+            "Running in --smoke mode: evaluating %d example(s) out of %d loaded "
+            "(max_examples=%d).",
+            len(records),
+            original_total,
+            args.max_examples,
+        )
+
+        # On CPU-only environments, skip GPU-only model loading by switching
+        # to --mock semantics automatically.
+        if not args.mock:
+            try:
+                import torch  # type: ignore[import]
+            except Exception:  # pragma: no cover - import-time issues
+                logger.warning(
+                    "PyTorch is not available; --smoke will run in mock mode "
+                    "without loading a model."
+                )
+                args.mock = True
+            else:
+                if not torch.cuda.is_available():
+                    logger.info(
+                        "No CUDA device detected; --smoke will run in mock mode "
+                        "and skip model loading."
+                    )
+                    args.mock = True
+
     logger.info(
-        "Loaded %d validation records from %s (max_examples=%d).",
+        "Loaded %d validation records from %s (max_examples=%d, smoke=%s).",
         len(records),
         val_path,
         args.max_examples,
+        args.smoke,
+    )
+
+    # Resolve the compute dtype for 4-bit quantization. We accept an 'auto'
+    # option that prefers bfloat16 on GPUs with bf16 support and otherwise
+    # falls back to float16.
+    bnb_compute_dtype = args.bnb_4bit_compute_dtype
+    if bnb_compute_dtype == "auto":
+        resolved = "float16"
+        try:
+            import torch  # type: ignore[import]
+        except Exception:  # pragma: no cover - import-time issues
+            logger.warning(
+                "Could not import torch while resolving --bnb_4bit_compute_dtype; "
+                "falling back to float16."
+            )
+        else:
+            has_cuda = torch.cuda.is_available()
+            if has_cuda and (args.device or "auto").lower() != "cpu":
+                is_bf16_supported = getattr(torch.cuda, "is_bf16_supported", None)
+                try:
+                    if callable(is_bf16_supported) and torch.cuda.is_bf16_supported():
+                        resolved = "bfloat16"
+                except Exception:  # pragma: no cover - defensive
+                    resolved = "float16"
+        bnb_compute_dtype = resolved
+
+    logger.info(
+        "4-bit loading configuration: load_in_4bit=%s, "
+        "bnb_4bit_quant_type=%s, bnb_4bit_compute_dtype=%s, "
+        "bnb_4bit_use_double_quant=%s",
+        args.load_in_4bit,
+        args.bnb_4bit_quant_type,
+        bnb_compute_dtype,
+        args.bnb_4bit_use_double_quant,
     )
 
     eval_config = EvalConfig(
@@ -342,6 +478,10 @@ def run_eval(args: argparse.Namespace) -> int:
         mock=args.mock,
         load_in_4bit=args.load_in_4bit,
         dtype=args.dtype,
+        bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+        bnb_4bit_compute_dtype=bnb_compute_dtype,
+        bnb_4bit_use_double_quant=args.bnb_4bit_use_double_quant,
+        smoke=args.smoke,
     )
 
     gold_sqls: List[str] = []
@@ -374,19 +514,25 @@ def run_eval(args: argparse.Namespace) -> int:
 
         logger.info(
             "Loading model for inference with base_model=%s, adapter_dir=%s, "
-            "device=%s, load_in_4bit=%s, dtype=%s",
+            "device=%s, load_in_4bit=%s, dtype=%s, bnb_4bit_quant_type=%s, "
+            "bnb_4bit_compute_dtype=%s, bnb_4bit_use_double_quant=%s",
             args.base_model,
             args.adapter_dir,
             args.device,
             args.load_in_4bit,
             args.dtype,
+            args.bnb_4bit_quant_type,
+            bnb_compute_dtype,
+            args.bnb_4bit_use_double_quant,
         )
         load_model_for_inference(
             base_model=args.base_model,
             adapter_dir=args.adapter_dir,
             device=args.device,
             load_in_4bit=args.load_in_4bit,
-            bnb_compute_dtype="float16",
+            bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+            bnb_4bit_use_double_quant=args.bnb_4bit_use_double_quant,
+            bnb_compute_dtype=bnb_compute_dtype,
             dtype=args.dtype,
         )
 

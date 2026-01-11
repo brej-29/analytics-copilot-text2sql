@@ -19,9 +19,7 @@ if str(SRC_DIR) not in sys.path:
 
 from text2sql.eval.metrics import aggregate_metrics  # noqa: E402  # isort: skip
 from text2sql.eval.normalize import normalize_sql  # noqa: E402  # isort: skip
-from text2sql.eval.schema import parse_create_table_context  # noqa: E402  # isort: skip
 from text2sql.eval.spider import (  # noqa: E402  # isort: skip
-    build_schema_map,
     build_spider_prompt,
     load_spider_schema_map,
     spider_schema_to_pseudo_ddl,

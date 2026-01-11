@@ -1,8 +1,6 @@
 from pathlib import Path
 import sys
 
-import pytest
-
 
 def _ensure_src_on_path() -> None:
     """Ensure that the 'src' directory is available on sys.path for imports."""

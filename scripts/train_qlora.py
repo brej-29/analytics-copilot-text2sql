@@ -15,8 +15,8 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from text2sql.training.config import TrainingConfig
-from text2sql.training.formatting import build_prompt, ensure_sql_only
+from text2sql.training.config import TrainingConfig  # noqa: E402  # isort: skip
+from text2sql.training.formatting import build_prompt, ensure_sql_only  # noqa: E402  # isort: skip
 
 
 logger = logging.getLogger(__name__)
@@ -466,7 +466,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (RuntimeError, ValueError) as exc:
         logger.error("Training run failed: %s", exc)
         return 1
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.error("Unexpected error during training run.", exc_info=True)
         return 1
 
