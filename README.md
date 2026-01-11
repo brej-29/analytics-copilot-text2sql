@@ -311,6 +311,8 @@ You can re-run the script safely; it will perform another commit with the specif
 
 ---
 
+
+
 ## Demo – Streamlit UI (Remote Inference)
 
 The repository includes a lightweight Streamlit UI that talks to a **remote**
@@ -327,10 +329,18 @@ model via Hugging Face Inference (no local GPU required). The app lives at
   but large models like Mistral-7B often require **Inference Endpoints** or a
   dedicated provider.
 - If serverless calls fail or time out, consider deploying a dedicated
-  Inference Endpoint or self-hosted TGI/serving stack and point the app at its
-  URL via `HF_INFERENCE_BASE_URL`.
+  Inference Endpoint or self-hosted TGI/serving stack and pointing the app at
+  its URL via `HF_ENDPOINT_URL` / `HF_INFERENCE_BASE_URL`.
 
-### Local Usage
+> **Adapter repos and the HF router:** If you point the app at a pure LoRA
+> adapter repository (e.g. `BrejBala/analytics-copilot-mistral7b-text2sql-adapter`)
+> using `HF_MODEL_ID` without an `HF_ENDPOINT_URL`, the request goes through
+> the Hugging Face **router** and most providers will respond with
+> `model_not_supported`. For adapter-based inference, use a dedicated
+> Inference Endpoint and configure `HF_ENDPOINT_URL` + `HF_ADAPTER_ID` instead
+> of trying to call the adapter repo directly via the router.
+
+### Running the app locally
 
 1. Configure Streamlit secrets by creating `.streamlit/secrets.toml` from the
    example:
@@ -339,14 +349,31 @@ model via Hugging Face Inference (no local GPU required). The app lives at
    cp .streamlit/secrets.toml.example .streamlit/secrets.toml
    ```
 
-   Then edit `.streamlit/secrets.toml` (not tracked by git) and fill in:
+   Then edit `.streamlit/secrets.toml` (not tracked by git) and fill in either:
+
+   **Preferred: dedicated endpoint + adapter**
 
    ```toml
-   HF_TOKEN = "hf_your_access_token_here"
-   HF_MODEL_ID = "your-username/your-text2sql-model-or-adapter"
-   HF_INFERENCE_BASE_URL = ""  # optional, e.g. "https://your-endpoint-url"
-   HF_PROVIDER = "auto"        # optional provider hint
+   HF_TOKEN        = "hf_your_access_token_here"
+
+   # Dedicated Inference Endpoint / TGI URL
+   HF_ENDPOINT_URL = "https://o0mmkmv1itfrikie.us-east4.gcp.endpoints.huggingface.cloud"
+
+   # Adapter identifier configured in your endpoint's LORA_ADAPTERS
+   HF_ADAPTER_ID   = "BrejBala/analytics-copilot-mistral7b-text2sql-adapter"
    ```
+
+   **Fallback: provider/router-based merged model (no adapters)**
+
+   ```toml
+   HF_TOKEN    = "hf_your_access_token_here"
+   HF_MODEL_ID = "your-username/your-merged-text2sql-model"
+   HF_PROVIDER = "auto"  # optional provider hint
+   ```
+
+   `HF_INFERENCE_BASE_URL` is also supported as an alias for `HF_ENDPOINT_URL`.
+   The app will always prefer secrets over environment variables when both are
+   set.
 
 2. Start the Streamlit app:
 
@@ -367,9 +394,11 @@ model via Hugging Face Inference (no local GPU required). The app lives at
 
 When deploying to Streamlit Cloud:
 
-- Add `HF_TOKEN`, `HF_MODEL_ID`, and optionally `HF_INFERENCE_BASE_URL` and
-  `HF_PROVIDER` to the app's **Secrets** in the Streamlit Cloud UI.
-- The app will automatically construct an `InferenceClient` from those values.
+- Add `HF_TOKEN`, `HF_ENDPOINT_URL`, and `HF_ADAPTER_ID` (or `HF_MODEL_ID` /
+  `HF_PROVIDER` for the router fallback) to the app's **Secrets** in the
+  Streamlit Cloud UI.
+- The app will automatically construct an `InferenceClient` from those values
+  and use the dedicated endpoint when `HF_ENDPOINT_URL` is set.
 - No GPU is required on the Streamlit side; all heavy lifting is done by the
   remote Hugging Face Inference backend.
 
@@ -393,6 +422,7 @@ Current high-level layout:
 │   ├── build_dataset.py
 │   ├── check_syntax.py
 │   ├── smoke_load_dataset.py
+│   ├── smoke_infer_endpoint.py
 │   ├── train_qlora.py
 │   ├── evaluate_internal.py
 │   ├── evaluate_spider_external.py
