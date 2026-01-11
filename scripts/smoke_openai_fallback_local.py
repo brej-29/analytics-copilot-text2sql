@@ -56,7 +56,7 @@ def main() -> None:
         print("ERROR: OPENAI_API_KEY is not configured. Aborting smoke test.")
         return
 
-    client = OpenAI(api_key=api_key)
+    """client = OpenAI(api_key=api_key)"""
 
     schema = """
 CREATE TABLE customers (
