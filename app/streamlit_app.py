@@ -42,6 +42,7 @@ Priority:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Mapping, NamedTuple, Optional, Tuple
@@ -168,6 +169,35 @@ def _get_openai_settings() -> Tuple[str, str]:
     return api_key, model_name
 
 
+def _is_openai_strict_json_enabled() -> bool:
+    """
+    Return True if structured JSON mode is enabled for the OpenAI fallback.
+
+    Controlled by OPENAI_FALLBACK_STRICT_JSON in Streamlit secrets or environment
+    variables. Defaults to False.
+    """
+    try:
+        secrets: Mapping[str, Any] = st.secrets  # type: ignore[assignment]
+    except Exception:  # noqa: BLE001
+        secrets = {}
+
+    def _get_from_mapping(mapping: Mapping[str, Any], key: str) -> str:
+        try:
+            value = mapping.get(key)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            value = None
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    raw_value = _get_from_mapping(secrets, "OPENAI_FALLBACK_STRICT_JSON") or os.environ.get(
+        "OPENAI_FALLBACK_STRICT_JSON",
+        "",
+    ).strip()
+
+    return raw_value.lower() in {"1", "true", "yes", "on"}
+
+
 @st.cache_resource(show_spinner=False)
 def _get_cached_client(
     hf_token: str,
@@ -200,6 +230,65 @@ def _get_cached_client(
     )
 
 
+def _openai_response_text(resp: Any) -> str:
+    """
+    Extract text content from an OpenAI Responses API response object.
+
+    1) Prefer the convenience `output_text` attribute when present and non-empty.
+    2) Otherwise, iterate over `resp.output` and aggregate any text content blocks.
+    """
+    try:
+        value = getattr(resp, "output_text", None)
+    except Exception:  # noqa: BLE001
+        value = None
+
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+
+    chunks: list[str] = []
+
+    try:
+        output = getattr(resp, "output", None)
+    except Exception:  # noqa: BLE001
+        output = None
+
+    if not output:
+        return ""
+
+    try:
+        for item in output:
+            if isinstance(item, dict):
+                content_list = item.get("content")
+            else:
+                content_list = getattr(item, "content", None)
+
+            if not content_list:
+                continue
+
+            for content in content_list:
+                text_val: Optional[str] = None
+                if isinstance(content, dict):
+                    text_val = content.get("text") or content.get("output_text")
+                else:
+                    try:
+                        text_val = getattr(content, "text", None)
+                    except Exception:  # noqa: BLE001
+                        text_val = None
+                    if text_val is None:
+                        try:
+                            text_val = getattr(content, "output_text", None)
+                        except Exception:  # noqa: BLE001
+                            text_val = None
+
+                if isinstance(text_val, str) and text_val:
+                    chunks.append(text_val)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to extract text from OpenAI response.output.")
+        return ""
+
+    return "".join(chunks).strip()
+
+
 def _call_openai_fallback(
     system_prompt: str,
     user_prompt: str,
@@ -217,22 +306,53 @@ def _call_openai_fallback(
 
     client = OpenAI(api_key=api_key)
     full_input = f"{system_prompt}\n\n{user_prompt}"
+
+    extra_kwargs: dict[str, Any] = {}
+    strict_json = _is_openai_strict_json_enabled()
+    if strict_json:
+        extra_kwargs["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "sql_fallback",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "sql": {"type": "string"},
+                    },
+                    "required": ["sql"],
+                    "additionalProperties": False,
+                },
+                "strict": True,
+            },
+        }
+
     response = client.responses.create(
         model=model_name,
         input=full_input,
         max_output_tokens=max_tokens,
+        **extra_kwargs,
     )
 
-    try:
-        text = response.output_text  # type: ignore[attr-defined]
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "OpenAI fallback response did not contain text output.",
-            exc_info=True,
-        )
-        raise RuntimeError("OpenAI fallback did not return text output") from exc
+    raw_text = _openai_response_text(response)
 
-    return (text or "").strip()
+    if strict_json and raw_text:
+        try:
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, dict):
+                sql_val = parsed.get("sql")
+                if isinstance(sql_val, str) and sql_val.strip():
+                    return sql_val.strip()
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Failed to parse structured JSON output from OpenAI fallback; "
+                "falling back to raw text.",
+            )
+
+    if not raw_text:
+        logger.warning("OpenAI fallback returned empty text output.")
+        return ""
+
+    return raw_text.strip()
 
 
 def _build_prompt(schema: str, question: str) -> Tuple[str, str]:
@@ -322,6 +442,17 @@ def _create_inference_client(timeout_s: int = 45) -> Tuple[InferenceClient, HFCo
     return client, hf_config
 
 
+def _extract_sql_from_text(raw_text: str) -> str:
+    """
+    Extract SQL from model output text.
+
+    Currently implemented as a simple pass-through that returns the
+    stripped text. Defined as a separate helper so it can be extended
+    or replaced in tests without changing call sites.
+    """
+    return raw_text.strip()
+
+
 def _call_model(
     client: InferenceClient,
     schema: str,
@@ -355,13 +486,20 @@ def _call_model(
 
     try:
         response = client.text_generation(**generation_kwargs)
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "Error while calling Hugging Face Inference API. "
-            "Attempting OpenAI fallback if configured.",
-        )
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc) if exc is not None else ""
+        lower_message = message.lower()
+        if "endpoint is paused" in lower_message:
+            logger.warning(
+                "Hugging Face Inference endpoint is paused; using OpenAI fallback.",
+            )
+        else:
+            logger.exception(
+                "Error while calling Hugging Face Inference API. "
+                "Attempting OpenAI fallback if configured.",
+            )
         try:
-            sql_text = _call_openai_fallback(
+            raw_text = _call_openai_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=max_tokens,
@@ -372,6 +510,15 @@ def _call_model(
                 "The service is temporarily unavailable. Please try again in a moment."
             )
             return None, user_prompt
+
+        if not raw_text.strip():
+            sql_text = "-- Fallback provider returned empty output. Try again."
+        else:
+            extracted = _extract_sql_from_text(raw_text)
+            if extracted and extracted.strip():
+                sql_text = extracted.strip()
+            else:
+                sql_text = raw_text.strip()
 
         st.caption("Using backup inference provider")
         return sql_text, user_prompt
