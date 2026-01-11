@@ -87,7 +87,6 @@ greater than 100, and how many orders did each of them place?
     raw_sql = streamlit_app._call_openai_fallback(  # type: ignore[attr-defined]
         system_prompt=system_prompt,
         user_prompt=user_prompt,
-        max_tokens=256,
     )
 
     print("\nOpenAI fallback raw output:")

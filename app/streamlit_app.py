@@ -320,7 +320,6 @@ def _openai_response_text(resp: Any) -> str:
 def _call_openai_fallback(
     system_prompt: str,
     user_prompt: str,
-    max_tokens: int,
 ) -> str:
     """
     Call the OpenAI Responses API as a fallback when HF inference fails.
@@ -357,7 +356,6 @@ def _call_openai_fallback(
     response = client.responses.create(
         model=model_name,
         input=full_input,
-        max_output_tokens=max_tokens,
         **extra_kwargs,
     )
 
@@ -530,7 +528,6 @@ def _call_model(
             raw_text = _call_openai_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=max_tokens,
             )
         except Exception:  # noqa: BLE001
             logger.exception("OpenAI fallback inference failed.")
