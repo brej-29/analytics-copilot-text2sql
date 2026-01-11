@@ -126,7 +126,7 @@ def test_openai_fallback_uses_raw_text_when_extractor_returns_empty(
             self._text = text
 
         def create(self, *args: Any, **kwargs: Any) -> _DummyOpenAIResponseRaw:  # noqa: ARG002
-            """Mimic OpenAI Responses.create without enforcing a specific signaturew:  # noqa: ARG002
+            """Mimic OpenAI Responses.create without enforcing a specific signature."""
             return _DummyOpenAIResponseRaw(self._text)
 
     class _DummyOpenAIClientRaw:
