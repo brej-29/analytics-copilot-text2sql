@@ -15,7 +15,7 @@ from pathlib import Path
 import sys
 from typing import Tuple
 
-from openai import OpenAI  # type: ignore[import]
+"""from openai import OpenAI  # type: ignore[import]"""
 
 
 def _ensure_root_on_path() -> None:
