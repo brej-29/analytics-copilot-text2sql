@@ -491,12 +491,19 @@ model via Hugging Face Inference (no local GPU required). The app lives at
 
 3. In the UI:
 
-   - Paste your database schema (DDL) into the **Schema** text area.
-   - Enter a natural-language question.
+   - Click one of the **Try an example** buttons to pre-fill a working
+     schema + question, or paste your own database schema (DDL) and enter a
+     natural-language question.
    - Click **Generate SQL** to call the remote model.
    - View the generated SQL in a code block (with a copy button).
    - Optionally open the **Show prompt** expander to inspect the exact prompt
      sent to the model (useful for debugging and prompt engineering).
+   - The sidebar **Backend** panel shows how inference is configured and
+     includes a **🔌 Wake up model** button that pings the endpoint to
+     warm it up (useful after inactivity, since dedicated Inference
+     Endpoints can scale to zero). This is just a warm-up ping — the
+     **Generate SQL** flow still falls back to OpenAI automatically if the
+     Hugging Face endpoint fails for any other reason.
 
 ### Deploying on Streamlit Community Cloud
 

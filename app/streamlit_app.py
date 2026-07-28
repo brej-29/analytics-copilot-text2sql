@@ -133,6 +133,63 @@ def _resolve_hf_config(
     )
 
 
+def _get_secrets_mapping() -> Mapping[str, Any]:
+    """Return Streamlit secrets as a mapping, or {} when unavailable (e.g. in tests)."""
+    try:
+        return st.secrets  # type: ignore[return-value]
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _describe_backend_mode(hf_config: HFConfig) -> str:
+    """One-line human-readable description of how inference is currently configured."""
+    if not hf_config.hf_token:
+        return "Not configured — set `HF_TOKEN` in secrets."
+    if hf_config.endpoint_url:
+        return f"Dedicated endpoint · adapter `{hf_config.adapter_id or '—'}`"
+    if hf_config.model_id:
+        return f"Router model `{hf_config.model_id}` (provider={hf_config.provider})"
+    return "Not configured — set `HF_ENDPOINT_URL` or `HF_MODEL_ID`."
+
+
+# Ready-made schema/question pairs so users can try the app without writing
+# DDL themselves. Pulled from real validation examples in reports/eval_internal.md.
+EXAMPLES: list[dict[str, str]] = [
+    {
+        "label": "Lowest-rated item",
+        "schema": (
+            "CREATE TABLE item (title VARCHAR, i_id VARCHAR);\n"
+            "CREATE TABLE review (i_id VARCHAR, rating INTEGER)"
+        ),
+        "question": "Find the name of the item with the lowest average rating.",
+    },
+    {
+        "label": "Below-average age",
+        "schema": "CREATE TABLE people (name VARCHAR, country VARCHAR, age INTEGER)",
+        "question": (
+            "Show the name and country for all people whose age is smaller "
+            "than the average."
+        ),
+    },
+    {
+        "label": "Quantity per product",
+        "schema": (
+            "CREATE TABLE Products (product_name VARCHAR, product_id VARCHAR);\n"
+            "CREATE TABLE Order_items (product_quantity INTEGER, product_id VARCHAR)"
+        ),
+        "question": (
+            "Show all product names and the total quantity ordered for each "
+            "product name."
+        ),
+    },
+    {
+        "label": "Largest department",
+        "schema": "CREATE TABLE student (dept_name VARCHAR)",
+        "question": "Find the name of the department with the highest number of students.",
+    },
+]
+
+
 def _get_openai_settings() -> Tuple[str, str]:
     """
     Resolve OpenAI fallback settings from Streamlit secrets and environment variables.
@@ -469,6 +526,29 @@ def _create_inference_client(timeout_s: int = 45) -> Tuple[InferenceClient, HFCo
     return client, hf_config
 
 
+def _wake_up_endpoint(client: InferenceClient) -> Tuple[bool, str]:
+    """
+    Send a minimal generation request purely to warm up a paused or
+    scaled-to-zero Hugging Face Inference Endpoint.
+
+    This is a warm-up ping, not a real query: it never falls back to OpenAI.
+    The existing Generate flow already falls back to OpenAI on any HF
+    failure, so that behavior is unaffected by this helper.
+
+    Returns
+    -------
+    (is_warm, message)
+    """
+    try:
+        client.text_generation(prompt="SELECT 1;", max_new_tokens=1)
+        return True, "Model is warm and ready."
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc) if exc is not None else "Unknown error"
+        if "endpoint is paused" in message.lower():
+            return False, "Endpoint is paused — resuming now, this can take up to a minute."
+        return False, f"Not reachable yet: {message[:160]}"
+
+
 def _extract_sql_from_text(raw_text: str) -> str:
     """
     Extract SQL from model output text.
@@ -645,15 +725,46 @@ def _call_model(
     return sql_text, user_prompt
 
 
-def _render_diagnostics_sidebar() -> None:
-    """Render a lightweight diagnostics panel in the sidebar."""
+def _render_backend_sidebar() -> None:
+    """Render the sidebar: backend mode, wake-up control, and diagnostics."""
+    st.sidebar.markdown("### Backend")
+
+    hf_config_preview = _resolve_hf_config(
+        secrets=_get_secrets_mapping(),
+        environ=os.environ,
+    )
+    st.sidebar.caption(_describe_backend_mode(hf_config_preview))
+
+    if st.sidebar.button("🔌 Wake up model", use_container_width=True):
+        if not hf_config_preview.hf_token or not (
+            hf_config_preview.endpoint_url or hf_config_preview.model_id
+        ):
+            st.sidebar.warning("Configure `HF_TOKEN` and an endpoint/model first.")
+        else:
+            with st.sidebar, st.spinner("Waking up endpoint..."):
+                client, _ = _create_inference_client(timeout_s=15)
+                is_warm, message = _wake_up_endpoint(client)
+            st.session_state["wake_status"] = {
+                "is_warm": is_warm,
+                "message": message,
+                "timestamp": time.time(),
+            }
+
+    wake_status = st.session_state.get("wake_status")
+    if isinstance(wake_status, dict):
+        elapsed_s = time.time() - float(wake_status.get("timestamp", time.time()))
+        icon = "✅" if wake_status.get("is_warm") else "⚠️"
+        st.sidebar.caption(f"{icon} {wake_status.get('message')} ({elapsed_s:.0f}s ago)")
+
+    st.sidebar.divider()
+
     try:
         state = st.session_state  # type: ignore[attr-defined]
         diagnostics = state.get("diagnostics_last_request")  # type: ignore[assignment]
     except Exception:  # noqa: BLE001
         diagnostics = None
 
-    with st.sidebar.expander("Diagnostics", expanded=False):
+    with st.sidebar.expander("Diagnostics (last request)", expanded=False):
         if not isinstance(diagnostics, dict):
             st.caption("Run a request to see diagnostics for the last call.")
             return
@@ -695,24 +806,47 @@ def main() -> None:
     )
 
     st.title("Analytics Copilot – Text-to-SQL")
-    st.markdown(
-        "This demo converts natural-language questions into SQL using a "
-        "remote model hosted on **Hugging Face Inference**. "
-        "The model is not loaded inside the Streamlit app; all heavy lifting "
-        "happens on a remote endpoint or serverless provider."
+    st.caption(
+        "Ask a question in plain English, get back a SQL query — generated "
+        "by a Mistral-7B model fine-tuned with QLoRA specifically for "
+        "text-to-SQL, served remotely via Hugging Face Inference."
     )
 
+    with st.expander("ℹ️ About this project", expanded=False):
+        st.markdown(
+            "Built to demonstrate an end-to-end LLM fine-tuning workflow: "
+            "dataset prep, QLoRA fine-tuning of Mistral-7B, evaluation "
+            "(in-domain + Spider dev generalization), and remote serving. "
+            "This app never loads the model locally — every request goes to "
+            "a Hugging Face Inference Endpoint, with an OpenAI fallback if "
+            "that endpoint is unavailable.\n\n"
+            "[View source on GitHub](https://github.com/brej-29/analytics-copilot-text2sql)"
+        )
+
+    if "schema_input" not in st.session_state:
+        st.session_state["schema_input"] = ""
+    if "question_input" not in st.session_state:
+        st.session_state["question_input"] = ""
+
     st.markdown("### Inputs")
+    st.caption("Try an example, or write your own schema and question below.")
+    example_cols = st.columns(len(EXAMPLES))
+    for col, example in zip(example_cols, EXAMPLES):
+        if col.button(example["label"], use_container_width=True):
+            st.session_state["schema_input"] = example["schema"]
+            st.session_state["question_input"] = example["question"]
 
     schema = st.text_area(
         "Database schema (DDL)",
         height=220,
+        key="schema_input",
         placeholder="CREATE TABLE orders (...);\nCREATE TABLE customers (...);",
     )
 
     question = st.text_area(
         "Question (natural language)",
         height=140,
+        key="question_input",
         placeholder="What is the total order amount per customer for the last 7 days?",
     )
 
@@ -742,11 +876,11 @@ def main() -> None:
     if generate_clicked:
         if not schema.strip():
             st.warning("Please provide a database schema (DDL) before generating SQL.")
-            _render_diagnostics_sidebar()
+            _render_backend_sidebar()
             return
         if not question.strip():
             st.warning("Please provide a natural-language question.")
-            _render_diagnostics_sidebar()
+            _render_backend_sidebar()
             return
 
         with st.spinner("Calling Hugging Face Inference API..."):
@@ -774,7 +908,7 @@ def main() -> None:
                 "inference endpoint. Please review the error message above."
             )
 
-    _render_diagnostics_sidebar()
+    _render_backend_sidebar()
 
 
 if __name__ == "__main__":
