@@ -5,3 +5,11 @@
 extend-exclude = [
   "notebooks",
 ]
+
+# Pin the active rule set explicitly. Ruff's own "default" selection has
+# broadened across releases (pyupgrade, isort, logging, etc.), and CI installs
+# `ruff` unpinned, so leaving this unset means new Ruff versions can silently
+# start failing on code the project was never written against. E4/E7/E9/F is
+# Ruff's long-standing conservative default (pyflakes + basic pycodestyle).
+[lint]
+select = ["E4", "E7", "E9", "F"]
